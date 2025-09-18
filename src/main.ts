@@ -1,5 +1,5 @@
 import express from "express"
-import type { Request, Response } from "express"
+import type { Response } from "express"
 import { engine } from 'express-handlebars';
 import bodyParser from "body-parser"
 
@@ -28,6 +28,10 @@ const bodyParserSettings = {
     inflate: false,
 }
 app.use(bodyParser.text(bodyParserSettings))
+
+type Request = express.Request & {
+    body?: string
+}
 
 app.use(express.static("public"))
 
@@ -64,13 +68,12 @@ app.get("/", async (req: Request, res: Response) => {
 app.post("/translation/:language/:hash/", (req: Request, res: Response) => {
     const { language, hash } = req.params
 
-    if(typeof req["body"] !== "string") {
+    if(typeof req.body !== "string") {
         res.statusMessage = `Content-Type must be ${bodyParserSettings.type}`
         res.send(405)
         return
     }
 
-    // @ts-ignore
     const translated: string = req.body
 
     if (translated.trim() === "") {
