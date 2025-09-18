@@ -1,18 +1,58 @@
 import express from "express"
-import type { Response } from "express"
+import type { Response, NextFunction as Next, Handler } from "express"
 import { engine } from 'express-handlebars';
 import bodyParser from "body-parser"
+import serveStatic from "serve-static"
+import type { ServeStaticOptions } from "serve-static"
 
 import { parse } from "node-html-parser"
 import type { HTMLElement } from "node-html-parser"
 
+import type { IncomingMessage, ServerResponse } from "http"
+import { Buffer } from "buffer"
 import * as path from "path"
 import * as fs from "fs/promises"
 
-import { sha256 } from "./utils.ts"
+import { TranslationMap } from "./utils.ts"
 
 const app = express()
 const port = 3000
+
+type Project = {
+    location: Location
+}
+
+type Location = {
+    type: "local"
+    path: string
+}
+
+type ProjectSettings = {
+    distDir: string
+    sourceLanguage: string
+    targetLanguages: string[]
+    contentSelector: string
+    existingTranslations: TranslationMap
+}
+
+const project: Project = {
+    location: {
+        type: "local",
+        path: "/home/emma/projects/fee-strike/frontend/",
+    }
+}
+
+function getProjectSettings(project: Project) {
+    return settings
+}
+
+const settings: ProjectSettings = {
+    distDir: "dist",
+    sourceLanguage: "Swedish",
+    targetLanguages: ["English", "Spanish"],
+    contentSelector: "h1, h2, h3, h4, h5, h6, p, li, title",
+    existingTranslations: TranslationMap.empty(),
+}
 
 app.set("views", "./views")
 app.engine("html", engine({
@@ -33,7 +73,7 @@ type Request = express.Request & {
     body?: string
 }
 
-app.use(express.static("public"))
+app.use(serveStatic("public"))
 
 app.get("/", async (req: Request, res: Response) => {
     const settings = await getProjectSettings(project)
@@ -65,6 +105,130 @@ app.get("/", async (req: Request, res: Response) => {
     })
 })
 
+app.use("/preview", staticWithRewrite(
+    path.join(project.location.path, settings.distDir),
+    {
+        extensions: [ "html" ],
+        write: function(res: ServerResponse, args: any[]) {
+            // Wy try to only rewrite requests for actual HTML content.
+            if(!res.req.headers["accept"]?.includes("text/html")) {
+                // @ts-ignore
+                return res.write(...args)
+            }
+
+            if (args.length !== 1 || !Buffer.isBuffer(args[0])) {//!(args[0] instanceof Buffer)) {
+                throw new Error("Unexpected arguments")
+            }
+            const buf = args[0]
+            const html: string = buf.toString("utf8")
+            const parsed: HTMLElement = parse(html, {
+                parseNoneClosedTags: true,
+            })
+
+            const elements = parsed.querySelectorAll("link, script, a, img, svg")
+
+            for (const e of elements) {
+                const href = e.getAttribute("href")
+                if (href !== undefined && href.startsWith("/")) {
+                    e.setAttribute("href", `/preview${href}`)
+                }
+
+                const src = e.getAttribute("src")
+                if (src !== undefined && src.startsWith("/")) {
+                    e.setAttribute("src", `/preview${src}`)
+                }
+            }
+
+            return res.write(parsed.toString())
+        }
+    }
+))
+
+function staticWithRewrite(
+    root: string,
+    options?: ServeStaticOptions & { write?: (res: ServerResponse, _: any[]) => void }
+): Handler {
+    const f = serveStatic(root, options)
+
+    // Thank you gpt.
+    const handler: ProxyHandler<ServerResponse> = {
+      get(target, prop, receiver) {
+          const value = Reflect.get(target, prop, receiver);
+          if (prop === "write") {
+              return (...args: any[]) => {
+                  if (typeof options?.write === "function") {
+                      options.write(target, args)
+                  }
+              }
+          }
+
+          return typeof value === "function"
+              ? value.bind(target) // preserve method context
+              : value;
+      },
+
+      set(target, prop, value, receiver) {
+          return Reflect.set(target, prop, value, receiver);
+      },
+
+      has(target, prop) {
+          return Reflect.has(target, prop);
+      },
+
+      ownKeys(target) {
+          return Reflect.ownKeys(target);
+      },
+
+      getOwnPropertyDescriptor(target, prop) {
+          return Reflect.getOwnPropertyDescriptor(target, prop);
+      },
+
+      defineProperty(target, prop, descriptor) {
+          return Reflect.defineProperty(target, prop, descriptor);
+      },
+
+      deleteProperty(target, prop) {
+          return Reflect.deleteProperty(target, prop);
+      },
+
+      getPrototypeOf(target) {
+          return Reflect.getPrototypeOf(target);
+      },
+
+      setPrototypeOf(target, proto) {
+          return Reflect.setPrototypeOf(target, proto);
+      },
+
+      isExtensible(target) {
+          return Reflect.isExtensible(target);
+      },
+
+      preventExtensions(target) {
+          return Reflect.preventExtensions(target);
+      },
+
+      apply(target, thisArg, args) {
+          return Reflect.apply(target, thisArg, args);
+      },
+
+        construct(target, args, newTarget) {
+            return Reflect.construct(target, args, newTarget);
+        }
+    }
+
+
+    return (req: IncomingMessage, res: ServerResponse, next: Next) => {
+        const proxyRes = new Proxy(res, handler)
+        return f(req, proxyRes, next)
+        //f(req, res, next)
+    }
+}
+
+function rewritePreviewUrls(req: Request, res: Response, next: Next) {
+    console.log("I am here!")
+    next()
+}
+
 app.post("/translation/:language/:hash/", (req: Request, res: Response) => {
     const { language, hash } = req.params
 
@@ -88,119 +252,6 @@ app.post("/translation/:language/:hash/", (req: Request, res: Response) => {
 app.listen(port, () => {
   console.log(`Listening on port ${port}`)
 })
-
-type Project = {
-    location: Location
-}
-
-type Location = {
-    type: "local"
-    path: string
-}
-
-type TranslationEntry = {
-    sourcePhrase: string,
-    translatedPhrases: Map<string, string> // maps language to phrase
-}
-
-class TranslationMap {
-
-    private map: Map<string, TranslationEntry> = new Map()
-
-    private constructor(translations: Iterable<readonly [string, TranslationEntry]>) {
-        this.map = new Map(translations)
-    }
-
-    public static empty(): TranslationMap {
-        return new TranslationMap([])
-    }
-
-    hasTranslation(phrase: string, language: string): boolean {
-        return this.hasTranslationH(sha256(phrase), language)
-    }
-
-    hasTranslationH(phraseHash: string, language: string): boolean {
-        return this
-            .map
-            .get(phraseHash)
-            ?.translatedPhrases
-            .get(language)
-            === undefined ? false : true
-    }
-
-    getTranslation(phrase: string, language: string): string | null {
-        return this.getTranslationH(sha256(phrase), language)
-    }
-
-    getTranslationH(phraseHash: string, language: string): string | null {
-        return this.map.get(phraseHash)?.translatedPhrases.get(language) ?? null
-    }
-
-    addTranslation(phrase: string, language: string, translation: string) {
-        this.addTranslationH(sha256(phrase), language, translation)
-    }
-
-    addTranslationH(phraseHash: string, language: string, translation: string) {
-        // Someone should add a source phrase first with addSourcePhrase
-        if (!this.map.has(phraseHash)) {
-            throw new Error("Need a source phrase first")
-        }
-        this.map.get(phraseHash)!.translatedPhrases.set(language, translation)
-    }
-
-    removeTranslation(phrase: string, language: string) {
-        this.removeTranslationH(sha256(phrase), language)
-    }
-
-    removeTranslationH(phraseHash: string, language: string) {
-        if (!this.hasTranslationH(phraseHash, language)) {
-            throw new Error("Cannot remove what doesn't exist!")
-        }
-        this.map.get(phraseHash)!.translatedPhrases.delete(language)
-    }
-
-    addSourcePhrase(phrase: string) {
-        const hash = sha256(phrase)
-        if (this.map.has(hash)) {
-            throw new Error("Source phrase already exists!")
-        }
-        this.map.set(hash, {
-            sourcePhrase: phrase,
-            translatedPhrases: new Map(),
-        })
-    }
-
-    entries(): [string, TranslationEntry][] {
-        return [...this.map.entries()]
-    }
-}
-
-type ProjectSettings = {
-    distDir: string
-    sourceLanguage: string
-    targetLanguages: string[]
-    contentSelector: string
-    existingTranslations: TranslationMap
-}
-
-const project: Project = {
-    location: {
-        type: "local",
-        path: "/home/emma/projects/fee-strike/frontend/",
-    }
-}
-
-function getProjectSettings(project: Project) {
-    return settings
-}
-
-const settings: ProjectSettings = {
-    distDir: "dist",
-    sourceLanguage: "Swedish",
-    targetLanguages: ["English", "Spanish"],
-    contentSelector: "h1, h2, h3, h4, h5, h6, p, li, title",
-    existingTranslations: TranslationMap.empty(),
-}
 
 type CoverageReport = {
     phrases: number
