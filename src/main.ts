@@ -1,19 +1,18 @@
 import express from "express"
-import type { Response, NextFunction as Next, Handler } from "express"
+import type { Response, NextFunction as Next } from "express"
 import { engine } from 'express-handlebars';
 import bodyParser from "body-parser"
 import serveStatic from "serve-static"
-import type { ServeStaticOptions } from "serve-static"
 
 import { parse } from "node-html-parser"
 import type { HTMLElement } from "node-html-parser"
 
-import type { IncomingMessage, ServerResponse } from "http"
+import type { ServerResponse } from "http"
 import { Buffer } from "buffer"
 import * as path from "path"
 import * as fs from "fs/promises"
 
-import { TranslationMap } from "./utils.ts"
+import { TranslationMap, serveStaticWithMapHtml } from "./utils.ts"
 
 const app = express()
 const port = 3000
@@ -49,7 +48,7 @@ function getProjectSettings(project: Project) {
 const settings: ProjectSettings = {
     distDir: "dist",
     sourceLanguage: "Swedish",
-    targetLanguages: ["English", "Spanish"],
+    targetLanguages: ["en", "sp"],
     contentSelector: "h1, h2, h3, h4, h5, h6, p, li, title",
     existingTranslations: TranslationMap.empty(),
 }
@@ -105,27 +104,12 @@ app.get("/", async (req: Request, res: Response) => {
     })
 })
 
-app.use("/preview", staticWithRewrite(
+app.use("/preview", serveStaticWithMapHtml(
     path.join(project.location.path, settings.distDir),
     {
         extensions: [ "html" ],
-        write: function(res: ServerResponse, args: any[]) {
-            // Wy try to only rewrite requests for actual HTML content.
-            if(!res.req.headers["accept"]?.includes("text/html")) {
-                // @ts-ignore
-                return res.write(...args)
-            }
-
-            if (args.length !== 1 || !Buffer.isBuffer(args[0])) {//!(args[0] instanceof Buffer)) {
-                throw new Error("Unexpected arguments")
-            }
-            const buf = args[0]
-            const html: string = buf.toString("utf8")
-            const parsed: HTMLElement = parse(html, {
-                parseNoneClosedTags: true,
-            })
-
-            const elements = parsed.querySelectorAll("link, script, a, img, svg")
+        mapHtml: function(html: HTMLElement) {
+            const elements = html.querySelectorAll("link, script, a, img, svg")
 
             for (const e of elements) {
                 const href = e.getAttribute("href")
@@ -139,95 +123,10 @@ app.use("/preview", staticWithRewrite(
                 }
             }
 
-            return res.write(parsed.toString())
+            return html
         }
     }
 ))
-
-function staticWithRewrite(
-    root: string,
-    options?: ServeStaticOptions & { write?: (res: ServerResponse, _: any[]) => void }
-): Handler {
-    const f = serveStatic(root, options)
-
-    // Thank you gpt.
-    const handler: ProxyHandler<ServerResponse> = {
-      get(target, prop, receiver) {
-          const value = Reflect.get(target, prop, receiver);
-          if (prop === "write") {
-              return (...args: any[]) => {
-                  if (typeof options?.write === "function") {
-                      options.write(target, args)
-                  }
-              }
-          }
-
-          return typeof value === "function"
-              ? value.bind(target) // preserve method context
-              : value;
-      },
-
-      set(target, prop, value, receiver) {
-          return Reflect.set(target, prop, value, receiver);
-      },
-
-      has(target, prop) {
-          return Reflect.has(target, prop);
-      },
-
-      ownKeys(target) {
-          return Reflect.ownKeys(target);
-      },
-
-      getOwnPropertyDescriptor(target, prop) {
-          return Reflect.getOwnPropertyDescriptor(target, prop);
-      },
-
-      defineProperty(target, prop, descriptor) {
-          return Reflect.defineProperty(target, prop, descriptor);
-      },
-
-      deleteProperty(target, prop) {
-          return Reflect.deleteProperty(target, prop);
-      },
-
-      getPrototypeOf(target) {
-          return Reflect.getPrototypeOf(target);
-      },
-
-      setPrototypeOf(target, proto) {
-          return Reflect.setPrototypeOf(target, proto);
-      },
-
-      isExtensible(target) {
-          return Reflect.isExtensible(target);
-      },
-
-      preventExtensions(target) {
-          return Reflect.preventExtensions(target);
-      },
-
-      apply(target, thisArg, args) {
-          return Reflect.apply(target, thisArg, args);
-      },
-
-        construct(target, args, newTarget) {
-            return Reflect.construct(target, args, newTarget);
-        }
-    }
-
-
-    return (req: IncomingMessage, res: ServerResponse, next: Next) => {
-        const proxyRes = new Proxy(res, handler)
-        return f(req, proxyRes, next)
-        //f(req, res, next)
-    }
-}
-
-function rewritePreviewUrls(req: Request, res: Response, next: Next) {
-    console.log("I am here!")
-    next()
-}
 
 app.post("/translation/:language/:hash/", (req: Request, res: Response) => {
     const { language, hash } = req.params

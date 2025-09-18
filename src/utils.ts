@@ -1,4 +1,12 @@
 import { createHash } from "node:crypto"
+import type { IncomingMessage, ServerResponse } from "http"
+
+import { parse } from "node-html-parser"
+import type { HTMLElement } from "node-html-parser"
+
+import type { NextFunction, Handler } from "express"
+import type { ServeStaticOptions } from "serve-static"
+import serveStatic from "serve-static"
 
 export function sha256(input: string): string {
     return createHash("sha256").update(input).digest("hex")
@@ -78,5 +86,131 @@ export class TranslationMap {
 
     entries(): [string, TranslationEntry][] {
         return [...this.map.entries()]
+    }
+}
+
+export type ServeStaticWithMapHtmlOptions = ServeStaticOptions & {
+    mapHtml: (_: HTMLElement) => HTMLElement,
+}
+export function serveStaticWithMapHtml(
+    root: string,
+    options?: ServeStaticWithMapHtmlOptions,
+): Handler {
+    return serveStaticWithOverwrite(root, (() => {
+        if (options === undefined || options.mapHtml === undefined) {
+            return options
+        }
+
+        return {
+            ...options,
+            write: function(res: ServerResponse, args: any[]) {
+                // Wy try to only rewrite requests for actual HTML content.
+                if(!res.req.headers["accept"]?.includes("text/html")) {
+                    // @ts-ignore
+                    return res.write(...args)
+                }
+
+                if (args.length !== 1 || !Buffer.isBuffer(args[0])) {//!(args[0] instanceof Buffer)) {
+                    throw new Error("Unexpected arguments")
+                }
+
+                const buf = args[0]
+                const html: string = buf.toString("utf8")
+                const parsed: HTMLElement = parse(html, {
+                    parseNoneClosedTags: true,
+                })
+
+                const maped = options.mapHtml(parsed)
+
+                return res.write(parsed.toString())
+            },
+        }
+    })())
+}
+
+/*
+This is like the built-in express middleware `serve-static` except that this
+middleware let's you specify the a `write` option used to overwrite and otherwise
+manipulate the content of the body as it is served.
+ */
+export type ServeStaticWithOverwriteOptions = ServeStaticOptions & {
+    write?: (res: ServerResponse, _: any[]) => void
+}
+export function serveStaticWithOverwrite (
+    root: string,
+    options?: ServeStaticWithOverwriteOptions,
+): Handler {
+    const f = serveStatic(root, options)
+
+    // Thank you gpt.
+    const handler: ProxyHandler<ServerResponse> = {
+        get(target, prop, receiver) {
+            const value = Reflect.get(target, prop, receiver);
+            if (prop === "write") {
+                return (...args: any[]) => {
+                    if (typeof options?.write === "function") {
+                        options.write(target, args)
+                    }
+                }
+            }
+
+            return typeof value === "function"
+                ? value.bind(target) // preserve method context
+                : value;
+        },
+
+        set(target, prop, value, receiver) {
+            return Reflect.set(target, prop, value, receiver);
+        },
+
+        has(target, prop) {
+            return Reflect.has(target, prop);
+        },
+
+        ownKeys(target) {
+            return Reflect.ownKeys(target);
+        },
+
+        getOwnPropertyDescriptor(target, prop) {
+            return Reflect.getOwnPropertyDescriptor(target, prop);
+        },
+
+        defineProperty(target, prop, descriptor) {
+            return Reflect.defineProperty(target, prop, descriptor);
+        },
+
+        deleteProperty(target, prop) {
+            return Reflect.deleteProperty(target, prop);
+        },
+
+        getPrototypeOf(target) {
+            return Reflect.getPrototypeOf(target);
+        },
+
+        setPrototypeOf(target, proto) {
+            return Reflect.setPrototypeOf(target, proto);
+        },
+
+        isExtensible(target) {
+            return Reflect.isExtensible(target);
+        },
+
+        preventExtensions(target) {
+            return Reflect.preventExtensions(target);
+        },
+
+        //apply(target, thisArg, args) {
+        //    return Reflect.apply(target, thisArg, args);
+        //},
+
+        //construct(target, args, newTarget) {
+        //    return Reflect.construct(target, args, newTarget);
+        //}
+    }
+
+
+    return (req: IncomingMessage, res: ServerResponse, next: NextFunction) => {
+        const proxyRes = new Proxy(res, handler)
+        return f(req, proxyRes, next)
     }
 }
