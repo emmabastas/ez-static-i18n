@@ -2,7 +2,7 @@
     "compilerOptions": {
         "module": "nodenext",
         "moduleResolution": "nodenext",
-        "allowImportingTsExstensions",
+        "allowImportingTsExtensions": true,
         "resolvePackageJsonExports": true,
         "esModuleInterop": true,
         "isolatedModules": true,
