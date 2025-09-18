@@ -12,6 +12,25 @@ export function sha256(input: string): string {
     return createHash("sha256").update(input).digest("hex")
 }
 
+// mutates
+export type LinkRewriter =
+    (link: string, element: HTMLElement, prop: string) => string
+export function rewriteLinks(html: HTMLElement, f: LinkRewriter) {
+    const elements = html.querySelectorAll("link, script, a, img, svg")
+
+    for (const e of elements) {
+        const href = e.getAttribute("href")
+        if (href !== undefined) {
+            e.setAttribute("href", f(href, e, "href"))
+        }
+
+        const src = e.getAttribute("src")
+        if (src !== undefined) {
+            e.setAttribute("src", f(src, e, "src"))
+        }
+    }
+}
+
 export type TranslationEntry = {
     sourcePhrase: string,
     translatedPhrases: Map<string, string> // maps language to phrase

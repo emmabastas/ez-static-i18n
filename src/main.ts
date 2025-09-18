@@ -7,12 +7,11 @@ import serveStatic from "serve-static"
 import { parse } from "node-html-parser"
 import type { HTMLElement } from "node-html-parser"
 
-import type { ServerResponse } from "http"
-import { Buffer } from "buffer"
 import * as path from "path"
 import * as fs from "fs/promises"
 
 import { TranslationMap, serveStaticWithMapHtml } from "./utils.ts"
+import * as utils from "./utils.ts"
 
 const app = express()
 const port = 3000
@@ -111,17 +110,12 @@ app.use("/preview", serveStaticWithMapHtml(
         mapHtml: function(html: HTMLElement) {
             const elements = html.querySelectorAll("link, script, a, img, svg")
 
-            for (const e of elements) {
-                const href = e.getAttribute("href")
-                if (href !== undefined && href.startsWith("/")) {
-                    e.setAttribute("href", `/preview${href}`)
+            utils.rewriteLinks(html, (link: string) => {
+                if (link.startsWith("/")) {
+                    return `/preview${link}`
                 }
-
-                const src = e.getAttribute("src")
-                if (src !== undefined && src.startsWith("/")) {
-                    e.setAttribute("src", `/preview${src}`)
-                }
-            }
+                return link
+            })
 
             return html
         }
