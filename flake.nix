@@ -19,6 +19,9 @@
               nodejs
               nodePackages."typescript"
               nodePackages."typescript-language-server"
+              jtd-codegen
+              sqlite
+              sqlitebrowser
             ];
             shellHook = ''
               export PATH="$PWD/frontend/node_modules/.bin/:$PATH"

@@ -1,0 +1,8 @@
+{
+    "type": "object",
+    "properties": {
+        "cookieSecret": { "type": "string" }
+    },
+    "required": [ "cookieSecret" ],
+    "additionalProperties": false
+}

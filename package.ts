@@ -1,4 +1,12 @@
-{
+import Ajv from "ajv"
+import type { JSONSchemaType } from "ajv"
+
+export interface Package {
+  [k: string]: unknown;
+}
+
+
+export const schema: JSONSchemaType<Package> = {
     "type": "module",
     "scripts": {
         "start": "concurrently --kill-others \"npm run components:dev\" \"node --experimental-strip-types src/main.ts\"",
@@ -23,3 +31,8 @@
         "json-schema-to-typescript": "^15.0.4"
     }
 }
+
+const ajv = new Ajv()
+export const validate = ajv.compile(schema)
+//export const serialize = ajv.compileSerializer(schema)
+//export const parse = ajv.compileParser(schema)

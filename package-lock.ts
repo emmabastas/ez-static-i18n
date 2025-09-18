@@ -1,4 +1,12 @@
-{
+import Ajv from "ajv"
+import type { JSONSchemaType } from "ajv"
+
+export interface PackageLock {
+  [k: string]: unknown;
+}
+
+
+export const schema: JSONSchemaType<Package-lock> = {
     "name": "ez-static-i18n",
     "lockfileVersion": 3,
     "requires": true,
@@ -2280,3 +2288,8 @@
         }
     }
 }
+
+const ajv = new Ajv()
+export const validate = ajv.compile(schema)
+//export const serialize = ajv.compileSerializer(schema)
+//export const parse = ajv.compileParser(schema)

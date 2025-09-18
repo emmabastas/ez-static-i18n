@@ -4,9 +4,22 @@ import type { IncomingMessage, ServerResponse } from "http"
 import { parse } from "node-html-parser"
 import type { HTMLElement } from "node-html-parser"
 
-import type { NextFunction, Handler } from "express"
+import type { Request, Response, NextFunction, Handler } from "express"
 import type { ServeStaticOptions } from "serve-static"
 import serveStatic from "serve-static"
+
+export type JsonLike = undefined | number | string | JsonLike[] | { [ key: string ]: JsonLike }
+
+export function assertUrlEncoded(req: Request, res: Response): JsonLike {
+    if (req.headers["content-type"] !== "application/x-www-form-urlencoded") {
+        res.statusCode = 405
+        res.statusMessage = "Expected content-type: application/x-www-form-urlencoded"
+        res.end()
+        throw new Error("Bad content-type")
+    }
+    // @ts-ignore
+    return req.body
+}
 
 export function sha256(input: string): string {
     return createHash("sha256").update(input).digest("hex")
