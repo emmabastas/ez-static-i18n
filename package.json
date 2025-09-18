@@ -1,0 +1,17 @@
+{
+    "type": "module",
+    "scripts": {
+        "start": "concurrently --kill-others \"npm run components:dev\" \"node --experimental-strip-types src/main.ts\"",
+        "components:dev": "tsc --watch --project ./components"
+    },
+    "devDependencies": {
+    },
+    "dependencies": {
+        "@types/express": "github:types/npm-express",
+        "concurrently": "^9.2.1",
+        "express": "^5.1.0",
+        "node-html-parser": "^7.0.1",
+        "body-parser": "^2.2.0",
+        "express-handlebars": "^8.0.3"
+    }
+}

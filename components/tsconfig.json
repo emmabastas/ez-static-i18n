@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "lib": ["dom", "dom.iterable", "esnext"],
+        "strict": true,
+        "module": "ESNext",
+        "target": "ES2015",
+        "sourceMap": true,
+        "outDir": "../public",
+        "skipLibCheck": true
+    },
+}
