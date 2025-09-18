@@ -98,7 +98,7 @@ function main(serverSettings: ServerSettings) {
     }
 
     type Request = express.Request & {
-        session: { data?: Session },
+        session: { data: Session },
         body: string | JsonLike,
     }
 
@@ -133,7 +133,7 @@ function main(serverSettings: ServerSettings) {
         req.session.data = {
             userId: id,
         }
-        res.redirect("/dashboard")
+        res.redirect("/home")
         return
     })
 
@@ -149,6 +149,28 @@ function main(serverSettings: ServerSettings) {
     })
 
     app.use(auth)
+
+    app.get("/home", (req: Request, res: Response) => {
+        const session = req.session.data
+        const projects = db.userProjects(session.userId)
+        res.render("home", {
+            hasProjects: projects.length > 0,
+            projects: projects,
+        })
+    })
+
+    app.get("/projects/new", (req: Request, res: Response) => {
+        res.render("projectNew")
+    })
+
+    app.post("/projects/new", (req: Request, res: Response) => {
+        const session = req.session.data
+        // @ts-ignore
+        const { name, pat } = utils.assertUrlEncoded(req, res)
+        const projectId = db.createProject(name, pat)
+        db.addUserToProject(session.userId, projectId)
+        res.redirect("/home")
+    })
 
     app.get("/dashboard", async (req: Request, res: Response) => {
         const settings = await getProjectSettings(project)

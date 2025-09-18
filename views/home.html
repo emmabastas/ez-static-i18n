@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>ezi18n</title>
+</head>
+<body>
+    {{^ hasProjects }}
+    <p>You have no projects, <a href="/projects/new">start one ;-)</a></p>
+    {{/ hasProjects }}
+    {{# hasProjects }}
+    <ul>
+        {{# projects }}
+        <li>{{ name }}</li>
+        {{/ projects }}
+    </ul>
+    {{/ hasProjects }}
+</body>
+</html>

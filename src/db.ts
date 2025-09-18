@@ -17,15 +17,14 @@ function db(): DatabaseSync {
 
 export function projects(): Project {
     const q = db().prepare(`
-      SELECT * from "projects"
+        SELECT * from "projects"
     `)
     return q.all() as unknown as Project
 }
 
 export async function authenticateUser(email: string, password: string): Promise<number | null> {
     const q = db().prepare(`
-      SELECT id, key FROM users WHERE email = ?
-    `)
+        SELECT id, key FROM users WHERE email = ?`)
     const keys = q.all(email)
 
     if (keys.length === 0) {
@@ -35,7 +34,6 @@ export async function authenticateUser(email: string, password: string): Promise
     if (keys.length !== 1) {
         throw new Error("Unexpected")
     }
-
     const key = keys[0]["key"]
     if (typeof key !== "string") {
         throw new Error("Unexpected")
@@ -62,8 +60,55 @@ export async function createUser(email: string, password: string) {
 
     const key = await bcrypt.hash(password, 10)
     const q = db().prepare(`
-      INSERT INTO users (key, email) VALUES (?, ?)
-    `)
+        INSERT INTO users (key, email) VALUES (?, ?)`)
 
     q.run(key, email)
+}
+
+export type ProjectInfo = {
+    id: string
+    name: string
+}
+
+export function userProjects(userId: number): ProjectInfo[] {
+    const q = db().prepare(`
+        SELECT p.id, p.name FROM projects p WHERE p.id IN
+            (SELECT u.project_id FROM user_projects u WHERE user_id = ?)`)
+    const results = q.all(userId)
+
+    return results.map(e => {
+        return {
+            id: e["id"] as string,
+            name: e["name"] as string,
+        }
+    })
+}
+
+export function createProject(name: string, pat: string): number {
+    const q = db().prepare(`
+        INSERT INTO projects (name, token, type) VALUES (?, ?, ?)`)
+    const result = q.run(name, pat, 1)
+    const newId = result.lastInsertRowid
+    if (typeof newId !== "number") {
+        throw new Error("Unexpected")
+    }
+    return newId
+    //const q = db().prepare(`
+    //    INSERT INTO projects (name, token, type) VALUES (?, ?, ?)
+    //    OUTPUT INSERTED.id`)
+    //const results = q.all(name, pat, 1)
+    //if (results.length !== 1) {
+    //    throw new Error("Unexpected")
+    //}
+    //if (typeof results[0] !== "number") {
+    //    throw new Error("Unexpected")
+    //}
+    //return results[0]
+}
+
+export function addUserToProject(userId: number, projectId: number) {
+    const q = db().prepare(`
+        INSERT INTO user_projects (user_id, project_id) VALUES (?, ?)
+`)
+    q.run(userId, projectId)
 }
