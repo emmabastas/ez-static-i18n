@@ -73,12 +73,10 @@ type Request = express.Request & {
 
 app.use(serveStatic("public"))
 
-app.get("/", async (req: Request, res: Response) => {
+app.get("/dashboard", async (req: Request, res: Response) => {
     const settings = await getProjectSettings(project)
     const coverage = await translationCoverage(project, settings)
     await addNewSourcePhrases(project, settings)
-
-    console.log(settings.existingTranslations)
 
     res.render("dashboard", {
         sourceLanguage: settings.sourceLanguage,
@@ -108,14 +106,42 @@ app.use("/preview", serveStaticWithMapHtml(
     {
         extensions: [ "html" ],
         mapHtml: function(html: HTMLElement) {
-            const elements = html.querySelectorAll("link, script, a, img, svg")
-
             utils.rewriteLinks(html, (link: string) => {
                 if (link.startsWith("/")) {
                     return `/preview${link}`
                 }
                 return link
             })
+            return html
+        }
+    }
+))
+
+app.use("/preview/en", serveStaticWithMapHtml(
+    path.join(project.location.path, settings.distDir),
+    {
+        extensions: [ "html" ],
+        mapHtml: function(html: HTMLElement) {
+            const settings = getProjectSettings(project)
+
+            utils.rewriteLinks(html, (link: string) => {
+                if (link.startsWith("/")) {
+                    return `/preview/en${link}`
+                }
+                return link
+            })
+
+            const phraseEls = html.querySelectorAll(settings.contentSelector)
+            for (const phraseEl of phraseEls) {
+                const translated = settings.existingTranslations.getTranslation(
+                    phraseEl.innerHTML,
+                    "en",
+                )
+                if (translated === null) {
+                    continue
+                }
+                phraseEl.innerHTML = translated
+            }
 
             return html
         }
