@@ -14,10 +14,13 @@
         "bcrypt": "^6.0.0",
         "body-parser": "^2.2.0",
         "concurrently": "^9.2.1",
+        "connect-redis": "^9.0.0",
         "express": "^5.1.0",
         "express-handlebars": "^8.0.3",
         "express-session": "^1.18.2",
-        "node-html-parser": "^7.0.1"
+        "node-html-parser": "^7.0.1",
+        "redis": "^5.8.2",
+        "redis-om": "^0.4.7"
     },
     "devDependencies": {
         "json-schema-to-typescript": "^15.0.4"

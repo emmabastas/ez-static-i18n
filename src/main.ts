@@ -3,12 +3,10 @@ import type { Response, NextFunction as Next } from "express"
 import { engine } from 'express-handlebars';
 import bodyParser from "body-parser"
 import serveStatic from "serve-static"
-import session, { MemoryStore } from "express-session"
 
 import { parse } from "node-html-parser"
 import type { HTMLElement } from "node-html-parser"
 
-import * as path from "path"
 import * as fs from "fs/promises"
 
 import { TranslationMap, serveStaticWithMapHtml } from "./utils.ts"
@@ -17,6 +15,7 @@ import * as utils from "./utils.ts"
 
 import * as db from "./db.ts"
 import * as gh from "./github.ts"
+import { Cache } from "./cache.ts"
 
 import * as schemas from "../schemas/schemas.ts"
 
@@ -47,10 +46,11 @@ type ProjectSettings = {
 //    }
 //}
 
-function main(serverSettings: schemas.ServerSettings) {
+async function main(serverSettings: schemas.ServerSettings) {
+    const cache = await Cache.new(serverSettings.redis.url)
 
     // app.set("trust proxy", 1) // Uncomment this when wunning behind an https proxy.
-    app.use(session({
+    app.use(cache.sessionStorageMiddleware({
         cookie: {
             path: "/",
             httpOnly: true, // TODO
@@ -60,10 +60,7 @@ function main(serverSettings: schemas.ServerSettings) {
             priority: "medium",
             sameSite: "lax",
         },
-        saveUninitialized: false,
-        resave: false,
         secret: serverSettings.cookieSecret,
-        //store: MemoryStore, // TODO
     }))
     app.set("views", "./views")
     app.engine("html", engine({
@@ -376,17 +373,33 @@ function main(serverSettings: schemas.ServerSettings) {
                 continue
             }
 
-            const entryPath = `${distPath}/${e.path}`
+            const content = await (async () => {
+                // Is the value cached?
+                const cached = await cache.getGitObject(e.sha)
+                if (cached !== null) {
+                    if (cached.type === "tree") {
+                        throw new Error("Unexpected")
+                    }
+                    return cached.content
+                }
 
-            const file = await gh.repoFile(info.token, info.path, entryPath)
+                const entryPath = `${distPath}/${e.path}`
+                const file = await gh.repoFile(info.token, info.path, entryPath)
 
-            // This shouldn't be the case.. we established aboce that
-            // this is not a tree, AKA not a directory.
-            if (file.type === "directory") {
-                throw new Error("Unexpected")
-            }
+                if (file.type === "directory") {
+                    throw new Error("Unexpected")
+                }
 
-            const parsed: HTMLElement = parse(file.content, {
+                cache.saveGitObject(e.sha, {
+                    type: "blob",
+                    size: e.size,
+                    content: file.content,
+                })
+
+                return file.content
+            })()
+
+            const parsed: HTMLElement = parse(content, {
                 parseNoneClosedTags: true,
             })
 
@@ -437,17 +450,34 @@ function main(serverSettings: schemas.ServerSettings) {
                 continue
             }
 
-            const entryPath = `${distPath}/${e.path}`
+            const content = await (async () => {
+                // Is the value cached?
+                const cached = await cache.getGitObject(e.sha)
+                if (cached !== null) {
+                    if (cached.type === "tree") {
+                        throw new Error("Unexpected")
+                    }
+                    return cached.content
+                }
 
-            const file = await gh.repoFile(info.token, info.path, entryPath)
+                const entryPath = `${distPath}/${e.path}`
+                const file = await gh.repoFile(info.token, info.path, entryPath)
 
-            // This shouldn't be the case.. we established aboce that
-            // this is not a tree, AKA not a directory.
-            if (file.type === "directory") {
-                throw new Error("Unexpected")
-            }
+                if (file.type === "directory") {
+                    throw new Error("Unexpected")
+                }
 
-            const parsed: HTMLElement = parse(file.content, {
+                cache.saveGitObject(e.sha, {
+                    type: "blob",
+                    size: e.size,
+                    content: file.content,
+                })
+
+                return file.content
+            })()
+
+
+            const parsed: HTMLElement = parse(content, {
                 parseNoneClosedTags: true,
             })
 

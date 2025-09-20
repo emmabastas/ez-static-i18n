@@ -3,6 +3,9 @@ import type { JSONSchemaType } from "ajv"
 
 export interface ServerSettings {
   cookieSecret: string;
+  redis: {
+    url: string;
+  };
 }
 
 
@@ -11,10 +14,23 @@ export const schema: JSONSchemaType<ServerSettings> = {
     "properties": {
         "cookieSecret": {
             "type": "string"
+        },
+        "redis": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "url"
+            ],
+            "additionalProperties": false
         }
     },
     "required": [
-        "cookieSecret"
+        "cookieSecret",
+        "redis"
     ],
     "additionalProperties": false
 }

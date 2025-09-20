@@ -1,8 +1,16 @@
 {
     "type": "object",
     "properties": {
-        "cookieSecret": { "type": "string" }
+        "cookieSecret": { "type": "string" },
+        "redis": {
+            "type": "object",
+            "properties": {
+                "url": { "type": "string" }
+            },
+            "required": [ "url" ],
+            "additionalProperties": false
+        }
     },
-    "required": [ "cookieSecret" ],
+    "required": [ "cookieSecret", "redis" ],
     "additionalProperties": false
 }

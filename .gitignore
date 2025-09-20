@@ -4,3 +4,4 @@ public/
 lib/
 dev.db
 settings.dev.json
+dump.rdb
