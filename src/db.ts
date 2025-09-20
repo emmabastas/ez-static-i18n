@@ -65,12 +65,12 @@ export async function createUser(email: string, password: string) {
     q.run(key, email)
 }
 
-export type ProjectInfo = {
+export type ProjectSummary = {
     id: string
     name: string
 }
 
-export function userProjects(userId: number): ProjectInfo[] {
+export function userProjects(userId: number): ProjectSummary[] {
     const q = db().prepare(`
         SELECT p.id, p.name FROM projects p WHERE p.id IN
             (SELECT u.project_id FROM user_projects u WHERE user_id = ?)`)
@@ -84,10 +84,10 @@ export function userProjects(userId: number): ProjectInfo[] {
     })
 }
 
-export function createProject(name: string, pat: string): number {
+export function createProject(name: string, pat: string, path: string): number {
     const q = db().prepare(`
-        INSERT INTO projects (name, token, type) VALUES (?, ?, ?)`)
-    const result = q.run(name, pat, 1)
+        INSERT INTO projects (name, token, type, path) VALUES (?, ?, ?, ?)`)
+    const result = q.run(name, pat, 1, path)
     const newId = result.lastInsertRowid
     if (typeof newId !== "number") {
         throw new Error("Unexpected")
@@ -104,6 +104,37 @@ export function createProject(name: string, pat: string): number {
     //    throw new Error("Unexpected")
     //}
     //return results[0]
+}
+
+export type ProjectInfo = {
+    id: number,
+    token: string,
+    path: string,
+}
+
+export function projectInfo(userId: number, projectName: string): ProjectInfo | null {
+    const q = db().prepare(`
+        SELECT id, token, path FROM projects p WHERE
+           p.name = ?
+           AND p.id IN (SELECT project_id FROM user_projects WHERE user_id = ?)
+    `)
+    const results = q.all(projectName, userId)
+
+    if (results.length === 0) {
+        return null
+    }
+
+    if (results.length !== 1) {
+        throw new Error("Unexpected")
+    }
+
+    const result = results[0]
+
+    return {
+        id: result["id"] as number,
+        token: result["token"] as string,
+        path: result["path"] as string,
+    }
 }
 
 export function addUserToProject(userId: number, projectId: number) {

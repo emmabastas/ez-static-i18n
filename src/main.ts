@@ -16,9 +16,9 @@ import type { JsonLike } from "./utils.ts"
 import * as utils from "./utils.ts"
 
 import * as db from "./db.ts"
+import * as gh from "./github.ts"
 
-import * as serverSettings from "../schemas/serverSettings.ts"
-import type { ServerSettings } from "../schemas/serverSettings.ts"
+import * as schemas from "../schemas/schemas.ts"
 
 const app = express()
 const port = 3000
@@ -40,26 +40,14 @@ type ProjectSettings = {
     existingTranslations: TranslationMap
 }
 
-const project: Project = {
-    location: {
-        type: "local",
-        path: "/home/emma/projects/fee-strike/frontend/",
-    }
-}
+//const project: Project = {
+//    location: {
+//        type: "local",
+//        path: "/home/emma/projects/fee-strike/frontend/",
+//    }
+//}
 
-function getProjectSettings(project: Project) {
-    return settings
-}
-
-const settings: ProjectSettings = {
-    distDir: "dist",
-    sourceLanguage: "Swedish",
-    targetLanguages: ["en", "sp"],
-    contentSelector: "h1, h2, h3, h4, h5, h6, p, li, title",
-    existingTranslations: TranslationMap.empty(),
-}
-
-function main(serverSettings: ServerSettings) {
+function main(serverSettings: schemas.ServerSettings) {
 
     // app.set("trust proxy", 1) // Uncomment this when wunning behind an https proxy.
     app.use(session({
@@ -159,23 +147,103 @@ function main(serverSettings: ServerSettings) {
         })
     })
 
-    app.get("/projects/new", (req: Request, res: Response) => {
+    app.get("/project/new", (req: Request, res: Response) => {
         res.render("projectNew")
     })
 
-    app.post("/projects/new", (req: Request, res: Response) => {
+    app.post("/project/new", async (req: Request, res: Response) => {
         const session = req.session.data
         // @ts-ignore
-        const { name, pat } = utils.assertUrlEncoded(req, res)
-        const projectId = db.createProject(name, pat)
+        const { name, pat, repopath } = utils.assertUrlEncoded(req, res)
+
+        // Check that the reponame is in the expected format
+        if (repopath.split("/").length !== 2) {
+            res.statusCode = 422
+            res.render("projectNew", { errorMessage: "Expected repository name to be of the form '<username>/<reponame>'" })
+            return
+        }
+
+        // Validate the token.
+        if (! (await gh.validateToken(pat))) {
+            res.render("projectNew", { errorMessage: "Hmmn, I don't think the token you supplied is valid." })
+            return
+        }
+
+        // Check that we can access the repository
+        try {
+            gh.repo(pat, repopath)
+        } catch (e) {
+            if (gh.is404(e)) {
+                res.render("projectNew", { errorMessage: `Could not find repository www.github.com/${repopath}. Does it exist? Is it accessible with the token?` })
+            }
+            throw e
+        }
+
+        // TODO: You shouldn't be allowed to name your project "new" :-))
+        // TODO: How do we make sure (username, projectname) is unique?
+
+        const projectId = db.createProject(name, pat, repopath)
         db.addUserToProject(session.userId, projectId)
         res.redirect("/home")
     })
 
-    app.get("/dashboard", async (req: Request, res: Response) => {
-        const settings = await getProjectSettings(project)
-        const coverage = await translationCoverage(project, settings)
-        await addNewSourcePhrases(project, settings)
+    app.get("/project/:projectName/dashboard", async (req: Request, res: Response) => {
+        const { projectName } = req.params
+        const { userId } = req.session.data
+
+        const pInfo = db.projectInfo(userId, projectName)
+
+        if (pInfo === null) {
+            res.send(404)
+            return
+        }
+
+        const projectId = pInfo.id
+        const projectToken = pInfo.token
+        const path = pInfo.path
+
+        //TODO branch should be configurable
+        const branch = "main"
+
+        let result: gh.File
+        try {
+            result = await gh.repoFile(projectToken, path, "ez-i18n.json")
+        } catch (e) {
+            if (gh.is404(e)) {
+                // TODO report something useful back
+                res.send("Cannot find ez-i18n.json in your repo")
+                return
+            }
+            throw e
+        }
+
+        // TODO handle
+        if (result.type === "directory") {
+            res.send(500)
+            throw new Error("Unexpected")
+        }
+
+        const json = JSON.parse(result.content)
+
+        // Validate ez-i18n.json against our schema
+        if(!schemas.projectSettings.validate(json)) {
+            // TODO report something useful back
+            res.statusCode = 422
+            res.statusMessage = "format of ez-i18n.json was in an unexpected format"
+            res.end()
+            return
+        }
+
+        const settings: ProjectSettings = {
+            distDir: json.distDir,
+            sourceLanguage: json.sourceLanguage,
+            targetLanguages: json.targetLanguages,
+            contentSelector: json.contentSelector,
+            existingTranslations: TranslationMap.fromObject(json.existingTranslations),
+        }
+
+        const coverage = await translationCoverage(pInfo, settings)
+        await addNewSourcePhrases(pInfo, settings)
 
         res.render("dashboard", {
             sourceLanguage: settings.sourceLanguage,
@@ -200,72 +268,72 @@ function main(serverSettings: ServerSettings) {
         })
     })
 
-    app.use("/preview", serveStaticWithMapHtml(
-        path.join(project.location.path, settings.distDir),
-        {
-            extensions: [ "html" ],
-            mapHtml: function(html: HTMLElement) {
-                utils.rewriteLinks(html, (link: string) => {
-                    if (link.startsWith("/")) {
-                        return `/preview${link}`
-                    }
-                    return link
-                })
-                return html
-            }
-        }
-    ))
+    //app.use("/preview", serveStaticWithMapHtml(
+    //    path.join(project.location.path, settings.distDir),
+    //    {
+    //        extensions: [ "html" ],
+    //        mapHtml: function(html: HTMLElement) {
+    //            utils.rewriteLinks(html, (link: string) => {
+    //                if (link.startsWith("/")) {
+    //                    return `/preview${link}`
+    //                }
+    //                return link
+    //            })
+    //            return html
+    //        }
+    //    }
+    //))
 
-    app.use("/preview/en", serveStaticWithMapHtml(
-        path.join(project.location.path, settings.distDir),
-        {
-            extensions: [ "html" ],
-            mapHtml: function(html: HTMLElement) {
-                const settings = getProjectSettings(project)
+    //app.use("/preview/en", serveStaticWithMapHtml(
+    //    path.join(project.location.path, settings.distDir),
+    //    {
+    //        extensions: [ "html" ],
+    //        mapHtml: function(html: HTMLElement) {
+    //            const settings = getProjectSettings(project)
 
-                utils.rewriteLinks(html, (link: string) => {
-                    if (link.startsWith("/")) {
-                        return `/preview/en${link}`
-                    }
-                    return link
-                })
+    //            utils.rewriteLinks(html, (link: string) => {
+    //                if (link.startsWith("/")) {
+    //                    return `/preview/en${link}`
+    //                }
+    //                return link
+    //            })
 
-                const phraseEls = html.querySelectorAll(settings.contentSelector)
-                for (const phraseEl of phraseEls) {
-                    const translated = settings.existingTranslations.getTranslation(
-                        phraseEl.innerHTML,
-                        "en",
-                    )
-                    if (translated === null) {
-                        continue
-                    }
-                    phraseEl.innerHTML = translated
-                }
+    //            const phraseEls = html.querySelectorAll(settings.contentSelector)
+    //            for (const phraseEl of phraseEls) {
+    //                const translated = settings.existingTranslations.getTranslation(
+    //                    phraseEl.innerHTML,
+    //                    "en",
+    //                )
+    //                if (translated === null) {
+    //                    continue
+    //                }
+    //                phraseEl.innerHTML = translated
+    //            }
 
-                return html
-            }
-        }
-    ))
+    //            return html
+    //        }
+    //    }
+    //))
 
-    app.post("/translation/:language/:hash/", (req: Request, res: Response) => {
-        const { language, hash } = req.params
+    //app.post("/translation/:language/:hash/", (req: Request, res: Response) => {
+    //    const { language, hash } = req.params
 
-        if(typeof req.body !== "string") {
-            res.statusMessage = `Content-Type must be ${bodyParserSettings.type}`
-            res.send(405)
-            return
-        }
+    //    if(typeof req.body !== "string") {
+    //        res.statusMessage = `Content-Type must be ${bodyParserSettings.type}`
+    //        res.send(405)
+    //        return
+    //    }
 
-        const translated: string = req.body
+    //    const translated: string = req.body
 
-        if (translated.trim() === "") {
-            settings.existingTranslations.removeTranslationH(hash, language)
-        } else {
-            settings.existingTranslations.addTranslationH(hash, language, translated)
-        }
+    //    if (translated.trim() === "") {
+    //        settings.existingTranslations.removeTranslationH(hash, language)
+    //    } else {
+    //        settings.existingTranslations.addTranslationH(hash, language, translated)
+    //    }
 
-        res.send(200)
-    })
+    //    res.send(200)
+    //})
 
     app.listen(port, () => {
       console.log(`Listening on port ${port}`)
@@ -278,19 +346,47 @@ function main(serverSettings: ServerSettings) {
 
     // mutates settings.existingTranslations
     async function addNewSourcePhrases(
-        project: Project,
+        info: db.ProjectInfo,
         settings: ProjectSettings
     ): Promise<void> {
-        if (project.location.type !== "local") {
-            throw new Error("TODO")
+        //const distPath = path.join(project.location.path, settings.distDir)
+        const distPath = (() => {
+            if (settings.distDir.startsWith("/")) {
+                return settings.distDir.slice(1)
+            }
+            if (settings.distDir.startsWith("./")) {
+                return settings.distDir.slice(2)
+            }
+            return settings.distDir
+        })()
+
+        // TODO branch should be configurable
+        // TODO: recursive: false is temporary -- don't want to be rate-limited
+        // while we have no caching.
+        const tree = await gh.tree(info.token, info.path, `main:${distPath}`, false)
+
+        // TODO handle
+        if (tree.truncated) {
+            throw new Error("Unexpected")
         }
 
-        const distPath = path.join(project.location.path, settings.distDir)
+        for (const e of tree.tree) {
+            // Skip directories
+            if (e.type === "tree") {
+                continue
+            }
 
+            const entryPath = `${distPath}/${e.path}`
 
-        for await (const e of fs.glob(path.join(distPath, "**/*.html"))) {
-            const data = await fs.readFile(e, { encoding: "utf8" })
-            const parsed: HTMLElement = parse(data, {
+            const file = await gh.repoFile(info.token, info.path, entryPath)
+
+            // This shouldn't be the case.. we established aboce that
+            // this is not a tree, AKA not a directory.
+            if (file.type === "directory") {
+                throw new Error("Unexpected")
+            }
+
+            const parsed: HTMLElement = parse(file.content, {
                 parseNoneClosedTags: true,
             })
 
@@ -309,21 +405,49 @@ function main(serverSettings: ServerSettings) {
     }
 
     async function translationCoverage(
-        project: Project,
+        info: db.ProjectInfo,
         settings: ProjectSettings,
     ): Promise<Map<string, CoverageReport>> {
-
-        if (project.location.type !== "local") {
-            throw new Error("TODO")
-        }
+        //const distPath = path.join(project.location.path, settings.distDir)
+        const distPath = (() => {
+            if (settings.distDir.startsWith("/")) {
+                return settings.distDir.slice(1)
+            }
+            if (settings.distDir.startsWith("./")) {
+                return settings.distDir.slice(2)
+            }
+            return settings.distDir
+        })()
 
         const stats: Map<string, CoverageReport> = new Map([])
 
-        const distPath = path.join(project.location.path, settings.distDir)
+        // TODO branch should be configurable
+        // TODO: recursive: false is temporary -- don't want to be rate-limited
+        // while we have no caching.
+        const tree = await gh.tree(info.token, info.path, `main:${distPath}`, false)
 
-        for await (const e of fs.glob(path.join(distPath, "**/*.html"))) {
-            const data = await fs.readFile(e, { encoding: "utf8" })
-            const parsed: HTMLElement = parse(data, {
+        // TODO handle
+        if (tree.truncated) {
+            throw new Error("Unexpected")
+        }
+
+        for (const e of tree.tree) {
+            // Skip directories
+            if (e.type === "tree") {
+                continue
+            }
+
+            const entryPath = `${distPath}/${e.path}`
+
+            const file = await gh.repoFile(info.token, info.path, entryPath)
+
+            // This shouldn't be the case.. we established aboce that
+            // this is not a tree, AKA not a directory.
+            if (file.type === "directory") {
+                throw new Error("Unexpected")
+            }
+
+            const parsed: HTMLElement = parse(file.content, {
                 parseNoneClosedTags: true,
             })
 
@@ -369,12 +493,12 @@ function main(serverSettings: ServerSettings) {
     }
 }
 
-let _serverSettings : ServerSettings | null = null
-async function getServerSettings() : Promise<ServerSettings> {
+let _serverSettings : schemas.ServerSettings | null = null
+async function getServerSettings() : Promise<schemas.ServerSettings> {
     if (_serverSettings === null) {
         const str = await fs.readFile("./settings.dev.json", { encoding: "utf8" })
         const json = JSON.parse(str)
-        if (serverSettings.validate(json)) {
+        if (schemas.serverSettings.validate(json)) {
             _serverSettings = json
         } else {
             throw new Error("Invalid format for settings")

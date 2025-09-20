@@ -61,6 +61,27 @@ export class TranslationMap {
         return new TranslationMap([])
     }
 
+    public static fromObject(
+        translations: {
+            [key: string]: {
+                sourcePhrase: string,
+                translatedPhrases: { [key: string]: string }
+            }
+        }
+    ): TranslationMap {
+        return new TranslationMap(Object
+            .entries(translations)
+            .map(([e, { sourcePhrase, translatedPhrases }]) => {
+                return [
+                    e,
+                    {
+                        sourcePhrase: sourcePhrase,
+                        translatedPhrases: new Map(Object.entries(translatedPhrases))
+                    }
+                ]
+        }))
+    }
+
     hasTranslation(phrase: string, language: string): boolean {
         return this.hasTranslationH(sha256(phrase), language)
     }

@@ -6,14 +6,15 @@
 </head>
 <body>
     {{^ hasProjects }}
-    <p>You have no projects, <a href="/projects/new">start one ;-)</a></p>
+    <p>You have no projects, <a href="/project/new">start one ;-)</a></p>
     {{/ hasProjects }}
     {{# hasProjects }}
     <ul>
         {{# projects }}
-        <li>{{ name }}</li>
+        <li><a href="project/{{ name }}/dashboard">{{ name }}</a></li>
         {{/ projects }}
     </ul>
+    <a href="/project/new">+ New project +</a>
     {{/ hasProjects }}
 </body>
 </html>

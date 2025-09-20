@@ -5,9 +5,14 @@
     <title>ezi18n</title>
 </head>
 <body>
-    <form action="/projects/new" method="post">
+    {{# errorMessage }}
+    <p>{{ . }}</p>
+    {{/ errorMessage }}
+    <form action="/project/new" method="post">
         <label for="name">Name</label>
         <input id="name" name="name" type="text">
+        <label for="repopath">Repository name</label>
+        <p style="display: inline;">www.github.com/</p><input id="repopath" name="repopath">
         <label for="pat">Personal access token</label>
         <input id="pat" name="pat" type="password">
         <input type="submit">
