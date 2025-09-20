@@ -9,6 +9,8 @@ import type { HTMLElement } from "node-html-parser"
 
 import * as fs from "fs/promises"
 
+import { lookup as mimeLookup } from "mime-types"
+
 import { TranslationMap, serveStaticWithMapHtml } from "./utils.ts"
 import type { JsonLike } from "./utils.ts"
 import * as utils from "./utils.ts"
@@ -18,6 +20,7 @@ import * as gh from "./github.ts"
 import { Cache } from "./cache.ts"
 
 import * as schemas from "../schemas/schemas.ts"
+import { ServerResponse } from "http";
 
 const app = express()
 const port = 3000
@@ -95,7 +98,16 @@ async function main(serverSettings: schemas.ServerSettings) {
         next()
     }
 
-    app.use(serveStatic("public"))
+    app.use(serveStatic("public", {
+        dotfiles: "ignore",
+        lastModified: false,
+        setHeaders: (res: ServerResponse, path: string) => {
+            res.setHeader(
+                "Content-Type",
+                mimeLookup(path) || "application/octet-stream"
+            )
+        },
+    }))
 
     app.get("/", (req: Request, res: Response) => {
         res.send("<h1>This is the landing page :-)</h1>")
