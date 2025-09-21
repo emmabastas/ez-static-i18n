@@ -1,3 +1,5 @@
+#!/usr/bin/env -S node --experimental-strip-types
+
 import express from "express"
 import type { Response, NextFunction as Next } from "express"
 import { engine } from 'express-handlebars';
