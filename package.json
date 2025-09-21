@@ -6,6 +6,7 @@
         "schemas:compile": "node --experimental-strip-types ./schemas/compile.ts"
     },
     "dependencies": {
+        "@tailwindcss/postcss": "^4.1.13",
         "@types/bcrypt": "^6.0.0",
         "@types/body-parser": "^1.19.6",
         "@types/express": "github:types/npm-express",
@@ -23,7 +24,8 @@
         "node-html-parser": "^7.0.1",
         "parcel": "^2.16.0",
         "redis": "^5.8.2",
-        "redis-om": "^0.4.7"
+        "redis-om": "^0.4.7",
+        "tailwindcss": "^4.1.13"
     },
     "devDependencies": {
         "json-schema-to-typescript": "^15.0.4"

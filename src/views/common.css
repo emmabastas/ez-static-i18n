@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+body {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+}
+
+[role=alert] {
+    padding: 12px;
+    border-radius: 8px;
+    background: #ff9494;
+}
+
+button, [type=submit] {
+    color: white;
+    background-color: #413a3a;
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+
+a {
+    color: blue;
+    text-decoration: underline;
+}
+
+a:visited {
+    color: purple;
+}

@@ -1,8 +1,8 @@
 .direnv/
 node_modules/
-public/
 lib/
 dev.db
 settings.dev.json
 dump.rdb
 .parcel-cache/
+dist/
