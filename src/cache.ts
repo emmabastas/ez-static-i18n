@@ -5,6 +5,9 @@ import { RedisStore } from "connect-redis"
 import express from "express"
 import session from "express-session"
 
+import type { ProjectSettings } from "./common.ts"
+import { TranslationMap } from "./utils.ts"
+
 export type GitObject = {
     type: "blob",
     size: number,
@@ -21,6 +24,12 @@ const gitObjectSchema = new Schema("gitObject", {
     size: { type: "number" },
     content: { type: "string" },
     children: { type: "string" },
+}, {
+    dataStructure: "HASH"
+})
+
+const projectSettingsSchema = new Schema("projectSettings", {
+    json: { type: "string" }
 }, {
     dataStructure: "HASH"
 })
@@ -45,12 +54,14 @@ export class Cache {
 
     private gitObjectRepository: Repository
     private distInfoRepository: Repository
+    private projectSettingsRepository: Repository
 
     private constructor(client: any) {
         this.client = client
         this.sessionStorageMiddleware_ = null
         this.gitObjectRepository = new Repository(gitObjectSchema, this.client)
         this.distInfoRepository = new Repository(distInfoSchema, this.client)
+        this.projectSettingsRepository = new Repository(projectSettingsSchema, this.client)
     }
 
     static async new(redisUrl: string): Promise<Cache> {
@@ -137,5 +148,40 @@ export class Cache {
             { content: JSON.stringify(info_) },
         )
         await this.distInfoRepository.expire(`${repoPath}:${branch}`, 600) // 10min
+    }
+
+    async getProjectSettings(
+        repoPath: string,
+        branch: string,
+    ): Promise<ProjectSettings | null> {
+        const ret = await this.projectSettingsRepository.fetch(`${repoPath}:${branch}`)
+
+        if (ret["json"] === undefined) {
+            console.log("getProjectSettings cache miss")
+            return null
+        }
+
+        const json = JSON.parse(ret["json"])
+
+        return {
+            ...json,
+            existingTranslations: TranslationMap.fromObject(json["existingTranslations"]),
+        }
+    }
+
+    async saveProjectSettings(
+        repoPath: string,
+        branch: string,
+        settings: ProjectSettings,
+    ) {
+        this.projectSettingsRepository.save(`${repoPath}:${branch}`, {
+            json: JSON.stringify({
+                distDir: settings.distDir,
+                sourceLanguage: settings.sourceLanguage,
+                targetLanguages: settings.targetLanguages,
+                contentSelector: settings.contentSelector,
+                existingTranslations: settings.existingTranslations.toObject()
+            })
+        })
     }
 }

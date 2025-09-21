@@ -1,4 +1,5 @@
 import { Cache } from "./cache.ts"
+import * as schemas from "../schemas/schemas.ts"
 import * as gh from "./github.ts"
 import {
     makeGitHubPath,
@@ -8,6 +9,7 @@ import type {
     GitHubRepoPath,
     GitHubPath,
 } from "./common.ts"
+import { TranslationMap } from "./utils.ts"
 
 export type GitObject = {
     type: "blob",
@@ -24,18 +26,76 @@ export interface FakeFs {
     gitBlob(sha: string): Promise<string | null>
 }
 
-export function makeFakeFs(
+export type FakeFsGitHubInit = {
     repoPath: GitHubRepoPath,
+    // branch: string ??
     token: string,
-    projectSettings: ProjectSettings,
     cache: Cache,
-): FakeFs {
-    return new GitHubFakeFs({
-        repoPath: repoPath,
-        distPath: makeGitHubPath(projectSettings.distDir),
-        token: token,
-        cache: cache,
-    })
+}
+
+export async function makeFakeGitHubFs(init: FakeFsGitHubInit): Promise<{
+    settings: ProjectSettings
+    fakeFs: FakeFs,
+}> {
+    // TODO sould be configurable
+    const branch = "main"
+
+    const settings = await (async () => {
+        // Do we have project settings in cache?
+        const cached = await init.cache.getProjectSettings(init.repoPath, branch)
+        if (cached !== null) {
+            return cached
+        }
+
+        let result: gh.File
+        try {
+            result = await gh.repoFile(init.token, init.repoPath, "ez-i18n.json")
+        } catch (e) {
+            if (gh.is404(e)) {
+                throw Error("TODO")
+            }
+            throw e
+        }
+
+        if (result.type === "directory") {
+            throw new Error("TODO")
+        }
+
+        const json = JSON.parse(result.content)
+
+        // Validate ez-i18n.json against our schema
+        if(!schemas.projectSettings.validate(json)) {
+            throw new Error("TODO")
+        }
+
+        const settings: ProjectSettings = {
+            distDir: json.distDir,
+            sourceLanguage: json.sourceLanguage,
+            targetLanguages: json.targetLanguages,
+            contentSelector: json.contentSelector,
+            existingTranslations: TranslationMap.fromObject(json.existingTranslations),
+        }
+
+        // Save to cache
+        init.cache.saveProjectSettings(
+            init.repoPath,
+            branch,
+            settings,
+        )
+
+        return settings
+    })()
+
+    return {
+        settings: settings,
+        fakeFs: new GitHubFakeFs({
+            repoPath: init.repoPath,
+            distPath: makeGitHubPath(settings.distDir),
+            token: init.token,
+            cache: init.cache,
+        })
+    }
+
 }
 
 export type GitHubFakeFsInit = {
@@ -77,10 +137,11 @@ export class GitHubFakeFs implements FakeFs {
                 this.token,
                 this.repoPath,
                 `${this.branch}:${this.distPath}`,
-                false // TODO change to true when we are sure it works
+                true // Get recursivevely
             )
         } catch (e) {
             if (gh.is404(e)) {
+                console.log("error", await (e as gh.RequestError).response.text())
                 return null
             }
             throw e

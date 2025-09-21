@@ -62,8 +62,14 @@ async function fetch_(endpoint: string[], method: Method, token: string, options
     headers.set("X-GitHub-Api-Version", "2022-11-28")
     options_.headers = headers
 
-    const url = `https://api.github.com/${endpoint.join("/")}`
-        + (options?.queryParams?.toString() ?? "")
+    const queryParams = (() => {
+        if (options?.queryParams !== undefined) {
+            return "?" + options.queryParams.toString()
+        }
+        return ""
+    })()
+
+    const url = `https://api.github.com/${endpoint.join("/")}` + queryParams
 
     const res = await fetch(url, options_)
 

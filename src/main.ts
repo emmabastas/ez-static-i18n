@@ -1,5 +1,5 @@
 import express from "express"
-import type { Response, NextFunction as Next } from "express"
+import type { Request, Response, NextFunction as Next, Handler, RequestHandler } from "express"
 import { engine } from 'express-handlebars';
 import bodyParser from "body-parser"
 import serveStatic from "serve-static"
@@ -13,17 +13,132 @@ import * as fs from "fs/promises"
 import { lookup as mimeLookup } from "mime-types"
 
 import { validateGitHubRepoPath, type ProjectSettings } from "./common.ts"
-import { TranslationMap, serveStaticWithMapHtml } from "./utils.ts"
+import { TranslationMap } from "./utils.ts"
 import type { JsonLike } from "./utils.ts"
 import * as utils from "./utils.ts"
 import * as db from "./db.ts"
 import * as gh from "./github.ts"
 import { Cache } from "./cache.ts"
 import * as schemas from "../schemas/schemas.ts"
-import { makeFakeFs } from "./fakeFs.ts";
+import { makeFakeGitHubFs } from "./fakeFs.ts";
+import type { FakeFs } from "./fakeFs.ts"
 
 const app = express()
 const port = 3000
+
+type Session = {
+    userId: number,
+}
+
+type Request = express.Request & {
+    session: { data: Session },
+    projectName: string
+    projectSettings: ProjectSettings
+    previewLanguage: string,
+    fakeFs: FakeFs
+    body: string | JsonLike,
+}
+
+// Expects that the project name is already available at req.projectName
+function projectInfo(cache: Cache): express.Router {
+    const router = express.Router()
+
+    router.use(async function(req: Request, res: Response, next: Next) {
+        const projectName = req.projectName
+        if (typeof projectName !== "string") {
+            throw new Error("Unexpected")
+        }
+
+        const { userId } = req.session.data
+
+        const pInfo = db.projectInfo(userId, projectName)
+
+        if (pInfo === null) {
+            res.send(404)
+            return
+        }
+
+        const ghRepoPath = validateGitHubRepoPath(pInfo.path)
+        if (ghRepoPath === null) {
+            throw new Error("TODO")
+        }
+        const { settings, fakeFs } = await makeFakeGitHubFs({
+            repoPath: ghRepoPath,
+            token: pInfo.token,
+            cache: cache,
+        })
+
+        req.projectSettings = settings
+        req.fakeFs = fakeFs
+
+        next()
+    })
+
+    return router
+}
+
+export type ServeStaticFromFakeFsDistInit = {
+    mapContent?: (req: Request, path: string, content: string) => string | null
+}
+
+export function serveStaticFromFakeFsDist(
+    options: ServeStaticFromFakeFsDistInit
+): express.Router {
+    const router = express.Router()
+
+    router.use(async function(req: Request, res: Response, next: Next) {
+        let path = req.path
+        if (path.endsWith("/")) {
+            path += "index.html"
+        }
+        if (path.startsWith("/")) {
+            path = path.slice(1)
+        }
+
+        const ffs = req.fakeFs
+
+        const entries = await ffs.distEntries()
+
+        if (entries === null) {
+            throw new Error("TODO")
+        }
+
+        const entry = entries.get(path)
+
+        // The requested item isn't listed
+        if (entry === undefined) {
+            res.send(404)
+            return
+        }
+
+        // The requested item is a directory.
+        if (entry.type === "tree") {
+            res.send(404)
+            return
+        }
+
+        let content = await ffs.gitBlob(entry.sha)
+
+        // The requested item doesn't exist in the repository.
+        // But it does accordint to ffs.distEntries(), something is wrong..
+        if (content === null) {
+            throw new Error("Unexpected")
+        }
+
+        if (options.mapContent) {
+            const mapped = options.mapContent(req, path, content)
+            if (mapped !== null) {
+                content = mapped
+            }
+        }
+
+        res.setHeader("Content-Type", mimeLookup(path) || "application/octet-stream")
+        res.send(content)
+        res.end()
+    })
+
+    return router
+}
 
 async function main(serverSettings: schemas.ServerSettings) {
     const cache = await Cache.new(serverSettings.redis.url)
@@ -56,15 +171,6 @@ async function main(serverSettings: schemas.ServerSettings) {
     }
     app.use(bodyParser.text(bodyParserSettings))
     app.use(bodyParser.urlencoded())
-
-    type Session = {
-        userId: number,
-    }
-
-    type Request = express.Request & {
-        session: { data: Session },
-        body: string | JsonLike,
-    }
 
     function auth(req: Request, res: Response, next: Next) {
         if (req.session?.data === undefined) {
@@ -183,52 +289,19 @@ async function main(serverSettings: schemas.ServerSettings) {
             return
         }
 
-        const projectId = pInfo.id
-        const projectToken = pInfo.token
-        const path = pInfo.path
-
-        //TODO branch should be configurable
-        const branch = "main"
-
-        let result: gh.File
-        try {
-            result = await gh.repoFile(projectToken, path, "ez-i18n.json")
-        } catch (e) {
-            if (gh.is404(e)) {
-                // TODO report something useful back
-                res.send("Cannot find ez-i18n.json in your repo")
-                return
-            }
-            throw e
+        const repoPath = validateGitHubRepoPath(pInfo.path)
+        if (repoPath === null) {
+            throw new Error("TODO")
         }
 
-        // TODO handle
-        if (result.type === "directory") {
-            res.send(500)
-            throw new Error("Unexpected")
-        }
+        const { settings, fakeFs } = await makeFakeGitHubFs({
+            repoPath: repoPath,
+            token: pInfo.token,
+            cache: cache,
+        })
 
-        const json = JSON.parse(result.content)
-
-        // Validate ez-i18n.json against our schema
-        if(!schemas.projectSettings.validate(json)) {
-            // TODO report something useful back
-            res.statusCode = 422
-            res.statusMessage = "format of ez-i18n.json was in an unexpected format"
-            res.end()
-            return
-        }
-
-        const settings: ProjectSettings = {
-            distDir: json.distDir,
-            sourceLanguage: json.sourceLanguage,
-            targetLanguages: json.targetLanguages,
-            contentSelector: json.contentSelector,
-            existingTranslations: TranslationMap.fromObject(json.existingTranslations),
-        }
-
-        const coverage = await translationCoverage(pInfo, settings)
-        await addNewSourcePhrases(pInfo, settings)
+        const coverage = await translationCoverage(settings, fakeFs)
+        await addNewSourcePhrases(settings, fakeFs)
 
         res.render("dashboard", {
             sourceLanguage: settings.sourceLanguage,
@@ -253,52 +326,71 @@ async function main(serverSettings: schemas.ServerSettings) {
         })
     })
 
-    //app.use("/preview", serveStaticWithMapHtml(
-    //    path.join(project.location.path, settings.distDir),
-    //    {
-    //        extensions: [ "html" ],
-    //        mapHtml: function(html: HTMLElement) {
-    //            utils.rewriteLinks(html, (link: string) => {
-    //                if (link.startsWith("/")) {
-    //                    return `/preview${link}`
-    //                }
-    //                return link
-    //            })
-    //            return html
-    //        }
-    //    }
-    //))
+    app.use("/preview-translated/:projectName/:lang", (req: Request, res: Response, next: Next) => {
+        req.projectName = req.params.projectName
+        req.previewLanguage = req.params.lang
+        next()
+    })
+    app.use("/preview-translated/:projectName/:lang", projectInfo(cache))
+    app.use("/preview-translated/:projectName/:lang", serveStaticFromFakeFsDist({
+        mapContent: function(req: Request, path: string, content: string) {
+            const settings = req.projectSettings
 
-    //app.use("/preview/en", serveStaticWithMapHtml(
-    //    path.join(project.location.path, settings.distDir),
-    //    {
-    //        extensions: [ "html" ],
-    //        mapHtml: function(html: HTMLElement) {
-    //            const settings = getProjectSettings(project)
+            if (path.endsWith(".html")) {
+                const html = parse(content, { parseNoneClosedTags: true })
 
-    //            utils.rewriteLinks(html, (link: string) => {
-    //                if (link.startsWith("/")) {
-    //                    return `/preview/en${link}`
-    //                }
-    //                return link
-    //            })
+                utils.rewriteLinks(html, (link: string) => {
+                    if (link.startsWith("/")) {
+                        return `/preview-translated/${req.projectName}/${req.previewLanguage}${link}`
+                    }
+                    return link
+                })
 
-    //            const phraseEls = html.querySelectorAll(settings.contentSelector)
-    //            for (const phraseEl of phraseEls) {
-    //                const translated = settings.existingTranslations.getTranslation(
-    //                    phraseEl.innerHTML,
-    //                    "en",
-    //                )
-    //                if (translated === null) {
-    //                    continue
-    //                }
-    //                phraseEl.innerHTML = translated
-    //            }
+                // Extract phrases
+                const phraseEls = html.querySelectorAll(settings.contentSelector)
+                for (const phraseEl of phraseEls) {
+                    const translated = settings.existingTranslations.getTranslation(
+                        phraseEl.innerHTML,
+                        "en",
+                    )
+                    if (translated === null) {
+                        continue
+                    }
+                    phraseEl.innerHTML = translated
+                }
 
-    //            return html
-    //        }
-    //    }
-    //))
+                return html.toString()
+            }
+
+            return null
+        }
+    }))
+
+    app.use("/preview/:projectName", (req: Request, res: Response, next: Next) => {
+        req.projectName = req.params.projectName
+        next()
+    })
+    app.use("/preview/:projectName", projectInfo(cache))
+    app.use("/preview/:projectName", serveStaticFromFakeFsDist({
+        mapContent: function(req: Request, path: string, content: string) {
+
+            if (path.endsWith(".html")) {
+                const html = parse(content, { parseNoneClosedTags: true })
+
+                // Rewrite the links
+                utils.rewriteLinks(html, (link: string) => {
+                    if (link.startsWith("/")) {
+                        return `/preview/${req.projectName}${link}`
+                    }
+                    return link
+                })
+
+                return html.toString()
+            }
+
+            return null
+        }
+    }))
 
     //app.post("/translation/:language/:hash/", (req: Request, res: Response) => {
     //    const { language, hash } = req.params
@@ -331,21 +423,10 @@ async function main(serverSettings: schemas.ServerSettings) {
 
     // mutates settings.existingTranslations
     async function addNewSourcePhrases(
-        info: db.ProjectInfo,
-        settings: ProjectSettings
+        settings: ProjectSettings,
+        ffs: FakeFs,
     ): Promise<void> {
-        const ghRepoPath = validateGitHubRepoPath(info.path)
-        if (ghRepoPath === null) {
-            throw new Error("TODO")
-        }
-        const fakeFs = makeFakeFs(
-            ghRepoPath,
-            info.token,
-            settings,
-            cache,
-        )
-
-        const entries = await fakeFs.distEntries()
+        const entries = await ffs.distEntries()
 
         if (entries === null) {
             throw new Error("TODO")
@@ -357,7 +438,7 @@ async function main(serverSettings: schemas.ServerSettings) {
                 continue
             }
 
-            const content = await fakeFs.gitBlob(sha)
+            const content = await ffs.gitBlob(sha)
 
             // The blob doesn't exist event though it's a child of the dist
             // tree.
@@ -384,23 +465,12 @@ async function main(serverSettings: schemas.ServerSettings) {
     }
 
     async function translationCoverage(
-        info: db.ProjectInfo,
         settings: ProjectSettings,
+        ffs: FakeFs,
     ): Promise<Map<string, CoverageReport>> {
-        const ghRepoPath = validateGitHubRepoPath(info.path)
-        if (ghRepoPath === null) {
-            throw new Error("TODO")
-        }
-        const fakeFs = makeFakeFs(
-            ghRepoPath,
-            info.token,
-            settings,
-            cache,
-        )
-
         const stats: Map<string, CoverageReport> = new Map([])
 
-        const entries = await fakeFs.distEntries()
+        const entries = await ffs.distEntries()
 
         if (entries === null) {
             throw new Error("TODO")
@@ -412,7 +482,7 @@ async function main(serverSettings: schemas.ServerSettings) {
                 continue
             }
 
-            const content = await fakeFs.gitBlob(sha)
+            const content = await ffs.gitBlob(sha)
 
             // The blob doesn't exist event though it's a child of the dist
             // tree.

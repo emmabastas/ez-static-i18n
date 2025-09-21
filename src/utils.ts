@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "http"
 
-import { parse } from "node-html-parser"
 import type { HTMLElement } from "node-html-parser"
 
 import type { Request, Response, NextFunction, Handler } from "express"
@@ -62,12 +61,10 @@ export class TranslationMap {
     }
 
     public static fromObject(
-        translations: {
-            [key: string]: {
-                sourcePhrase: string,
-                translatedPhrases: { [key: string]: string }
-            }
-        }
+        translations: Record<string, {
+            sourcePhrase: string,
+            translatedPhrases: Record<string, string>
+        }>
     ): TranslationMap {
         return new TranslationMap(Object
             .entries(translations)
@@ -80,6 +77,27 @@ export class TranslationMap {
                     }
                 ]
         }))
+    }
+
+    toObject(): Record<string, {
+        sourcePhrases: string,
+        translatedPhrases: Record<string, string>
+    }> {
+        const obj: Record<string, {
+            sourcePhrases: string,
+            translatedPhrases: Record<string, string>
+        }> = {}
+        for (const [k, v] of [...this.map.entries()]) {
+            const obj2: Record<string, string> = {}
+            for (const [k2, v2] of [...v.translatedPhrases.entries()]) {
+                obj2[k2] = v2
+            }
+            obj[k] = {
+                sourcePhrases: v.sourcePhrase,
+                translatedPhrases: obj2
+            }
+        }
+        return obj
     }
 
     hasTranslation(phrase: string, language: string): boolean {
@@ -140,45 +158,6 @@ export class TranslationMap {
     entries(): [string, TranslationEntry][] {
         return [...this.map.entries()]
     }
-}
-
-export type ServeStaticWithMapHtmlOptions = ServeStaticOptions & {
-    mapHtml: (_: HTMLElement) => HTMLElement,
-}
-export function serveStaticWithMapHtml(
-    root: string,
-    options?: ServeStaticWithMapHtmlOptions,
-): Handler {
-    return serveStaticWithOverwrite(root, (() => {
-        if (options === undefined || options.mapHtml === undefined) {
-            return options
-        }
-
-        return {
-            ...options,
-            write: function(res: ServerResponse, args: any[]) {
-                // Wy try to only rewrite requests for actual HTML content.
-                if(!res.req.headers["accept"]?.includes("text/html")) {
-                    // @ts-ignore
-                    return res.write(...args)
-                }
-
-                if (args.length !== 1 || !Buffer.isBuffer(args[0])) {//!(args[0] instanceof Buffer)) {
-                    throw new Error("Unexpected arguments")
-                }
-
-                const buf = args[0]
-                const html: string = buf.toString("utf8")
-                const parsed: HTMLElement = parse(html, {
-                    parseNoneClosedTags: true,
-                })
-
-                const maped = options.mapHtml(parsed)
-
-                return res.write(parsed.toString())
-            },
-        }
-    })())
 }
 
 /*
