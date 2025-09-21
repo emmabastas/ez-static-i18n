@@ -80,11 +80,11 @@ export class TranslationMap {
     }
 
     toObject(): Record<string, {
-        sourcePhrases: string,
+        sourcePhrase: string,
         translatedPhrases: Record<string, string>
     }> {
         const obj: Record<string, {
-            sourcePhrases: string,
+            sourcePhrase: string,
             translatedPhrases: Record<string, string>
         }> = {}
         for (const [k, v] of [...this.map.entries()]) {
@@ -93,7 +93,7 @@ export class TranslationMap {
                 obj2[k2] = v2
             }
             obj[k] = {
-                sourcePhrases: v.sourcePhrase,
+                sourcePhrase: v.sourcePhrase,
                 translatedPhrases: obj2
             }
         }
@@ -153,6 +153,10 @@ export class TranslationMap {
             sourcePhrase: phrase,
             translatedPhrases: new Map(),
         })
+    }
+
+    getSourcePhraseH(phraseHash: string): string | null {
+        return this.map.get(phraseHash)?.sourcePhrase ?? null
     }
 
     entries(): [string, TranslationEntry][] {

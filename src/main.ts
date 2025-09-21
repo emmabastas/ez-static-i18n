@@ -28,6 +28,11 @@ const port = 3000
 
 type Session = {
     userId: number,
+    //newTranslations: Map<string, TranslationMap> // project -> translatioNmap
+    newTranslations: Record<string, Record<string, {
+        sourcePhrase: string,
+        translatedPhrases: Record<string, string>
+    }>>
 }
 
 type Request = express.Request & {
@@ -211,6 +216,7 @@ async function main(serverSettings: schemas.ServerSettings) {
 
         req.session.data = {
             userId: id,
+            newTranslations: {},
         }
         res.redirect("/home")
         return
@@ -280,9 +286,9 @@ async function main(serverSettings: schemas.ServerSettings) {
 
     app.get("/project/:projectName/dashboard", async (req: Request, res: Response) => {
         const { projectName } = req.params
-        const { userId } = req.session.data
+        const session = req.session.data
 
-        const pInfo = db.projectInfo(userId, projectName)
+        const pInfo = db.projectInfo(session.userId, projectName)
 
         if (pInfo === null) {
             res.send(404)
@@ -301,13 +307,25 @@ async function main(serverSettings: schemas.ServerSettings) {
         })
 
         const coverage = await translationCoverage(settings, fakeFs)
-        await addNewSourcePhrases(settings, fakeFs)
+
+        const newTranslations: TranslationMap = (() => {
+            if (session.newTranslations[projectName] === undefined) {
+                return settings.existingTranslations
+            }
+            return TranslationMap.fromObject(session.newTranslations[projectName])
+        })()
+        await addNewSourcePhrases(newTranslations, settings, fakeFs)
+        session.newTranslations[projectName] = newTranslations.toObject()
+        //console.log("newTranslations", session.newTranslations["jamstack.org"])
 
         res.render("dashboard", {
+            project: projectName,
             sourceLanguage: settings.sourceLanguage,
             targetLanguages: settings.targetLanguages,
-            translations: settings.existingTranslations
+            translations: newTranslations
                 .entries()
+                .filter(([_, { sourcePhrase }]) => sourcePhrase.length < 100) // TODO: temporary filter
+                .slice(0, 200) // TODO: Hard-coded limit of 200 items
                 .map(([_, { sourcePhrase, translatedPhrases }]) => {
                     return {
                         sourcePhrase: sourcePhrase,
@@ -334,7 +352,10 @@ async function main(serverSettings: schemas.ServerSettings) {
     app.use("/preview-translated/:projectName/:lang", projectInfo(cache))
     app.use("/preview-translated/:projectName/:lang", serveStaticFromFakeFsDist({
         mapContent: function(req: Request, path: string, content: string) {
+            const projectName = req.projectName
+            const lang = req.previewLanguage
             const settings = req.projectSettings
+            const session = req.session.data
 
             if (path.endsWith(".html")) {
                 const html = parse(content, { parseNoneClosedTags: true })
@@ -346,17 +367,29 @@ async function main(serverSettings: schemas.ServerSettings) {
                     return link
                 })
 
-                // Extract phrases
+                // Get the latest-and-greatest most up-to-date version of the
+                // users translations
+                const newTranslations: TranslationMap = (() => {
+                    if (session.newTranslations[projectName] === undefined) {
+                        return settings.existingTranslations
+                    }
+                    return TranslationMap.fromObject(session.newTranslations[projectName])
+                })()
+
+
+                // Get all the phrases
                 const phraseEls = html.querySelectorAll(settings.contentSelector)
                 for (const phraseEl of phraseEls) {
-                    const translated = settings.existingTranslations.getTranslation(
+                    // Use a translation if one exists
+                    const translated = newTranslations.getTranslation(
                         phraseEl.innerHTML,
-                        "en",
+                        lang,
                     )
-                    if (translated === null) {
+                    if (translated !== null) {
+                        phraseEl.innerHTML = translated
                         continue
                     }
-                    phraseEl.innerHTML = translated
+                    // othwrwise leave the phrase unaltered.
                 }
 
                 return html.toString()
@@ -392,25 +425,42 @@ async function main(serverSettings: schemas.ServerSettings) {
         }
     }))
 
-    //app.post("/translation/:language/:hash/", (req: Request, res: Response) => {
-    //    const { language, hash } = req.params
+    app.use("/translation/:project", (req: Request, res: Response, next: Next) => {
+        req.projectName = req.params.project
+        next()
+    })
+    app.use("/translation/:project", projectInfo(cache))
+    app.post("/translation/:project/:language/:hash/", (req: Request, res: Response) => {
+        const { project, language, hash } = req.params
+        const settings = req.projectSettings
+        const session = req.session.data
 
-    //    if(typeof req.body !== "string") {
-    //        res.statusMessage = `Content-Type must be ${bodyParserSettings.type}`
-    //        res.send(405)
-    //        return
-    //    }
+        const newTranslations: TranslationMap = (() => {
+            if (session.newTranslations[project] === undefined) {
+                return settings.existingTranslations
+            }
+            return TranslationMap.fromObject(session.newTranslations[project])
+        })()
 
-    //    const translated: string = req.body
+        if(typeof req.body !== "string") {
+            res.statusMessage = `Content-Type must be ${bodyParserSettings.type}`
+            res.send(405)
+            return
+        }
 
-    //    if (translated.trim() === "") {
-    //        settings.existingTranslations.removeTranslationH(hash, language)
-    //    } else {
-    //        settings.existingTranslations.addTranslationH(hash, language, translated)
-    //    }
+        const translated: string = req.body
 
-    //    res.send(200)
-    //})
+        if (translated.trim() === "") {
+            newTranslations.removeTranslationH(hash, language)
+        } else {
+            newTranslations.addTranslationH(hash, language, translated)
+        }
+
+        session.newTranslations[project] = newTranslations.toObject()
+        console.log("post done", session.newTranslations)
+
+        res.send(200)
+    })
 
     app.listen(port, () => {
       console.log(`Listening on port ${port}`)
@@ -423,16 +473,17 @@ async function main(serverSettings: schemas.ServerSettings) {
 
     // mutates settings.existingTranslations
     async function addNewSourcePhrases(
+        translations: TranslationMap,
         settings: ProjectSettings,
         ffs: FakeFs,
     ): Promise<void> {
-        const entries = await ffs.distEntries()
+        const entries = (await ffs.distEntries())
 
         if (entries === null) {
             throw new Error("TODO")
         }
 
-        for (const { type, sha} of [...entries.values()]) {
+        for (const { type, sha} of [...entries.values()].slice(0, 100)) {
             // Skip directories
             if (type === "tree") {
                 continue
@@ -456,9 +507,7 @@ async function main(serverSettings: schemas.ServerSettings) {
 
             for (const phrase of phrases) {
                 try {
-                    // TranslationsMap throws error if source phrase already
-                    // exists
-                    settings.existingTranslations.addSourcePhrase(phrase)
+                    translations.addSourcePhrase(phrase)
                 } catch(_) {}
             }
         }
@@ -476,7 +525,8 @@ async function main(serverSettings: schemas.ServerSettings) {
             throw new Error("TODO")
         }
 
-        for (const { type, sha } of [...entries.values()]) {
+        // TODO: hard-coded limit of 100 files.
+        for (const { type, sha } of [...entries.values()].slice(0, 100)) {
             // Skip directories
             if (type === "tree") {
                 continue

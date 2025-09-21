@@ -36,6 +36,10 @@ class TranslationTable extends HTMLElement {
         super()
     }
 
+    static get observedAttributes() {
+        return [ "project-name" ]
+    }
+
     connectedCallback() {
         if (this.initialized) return
         this.initialized = true
@@ -118,7 +122,8 @@ class TranslationTable extends HTMLElement {
                 input.value = e.innerText
                 e.replaceChildren(input)
                 input.addEventListener("change", () => {
-                    fetch(`/translation/${language}/${hash}/`, {
+                    // TODO this is hardcoded
+                    fetch(`/translation/${this.getAttribute("project-name")}/${language}/${hash}/`, {
                         method: "POST",
                         body: input.value,
                         headers: {
