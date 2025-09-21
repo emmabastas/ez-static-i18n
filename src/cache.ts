@@ -5,13 +5,14 @@ import { RedisStore } from "connect-redis"
 import express from "express"
 import session from "express-session"
 
-type GitObject = {
+export type GitObject = {
     type: "blob",
     size: number,
     content: string, // Note: this will fail if we try to store a file that's
                      //       > 512 MB
 } | {
     type: "tree",
+    children: string[] // list of hashes
 }
 
 const gitObjectSchema = new Schema("gitObject", {
@@ -19,8 +20,20 @@ const gitObjectSchema = new Schema("gitObject", {
     type: { type: "string" }, // "tree" | "blob"
     size: { type: "number" },
     content: { type: "string" },
+    children: { type: "string" },
 }, {
     dataStructure: "HASH"
+})
+
+export type DistInfo = {
+    sha: string, // sha for the tree object representing the directory
+    children: Map<string, { sha: string, type: "blob" | "tree" }>,
+}
+
+const distInfoSchema = new Schema("distInfo", {
+    content: { type: "string" },
+}, {
+    dataStructure: "HASH",
 })
 
 export class Cache {
@@ -31,11 +44,13 @@ export class Cache {
     private sessionStorageMiddleware_ : express.RequestHandler | null
 
     private gitObjectRepository: Repository
+    private distInfoRepository: Repository
 
     private constructor(client: any) {
         this.client = client
         this.sessionStorageMiddleware_ = null
         this.gitObjectRepository = new Repository(gitObjectSchema, this.client)
+        this.distInfoRepository = new Repository(distInfoSchema, this.client)
     }
 
     static async new(redisUrl: string): Promise<Cache> {
@@ -70,11 +85,57 @@ export class Cache {
         if (ret["type"] === undefined) {
             return null
         }
+
+        if (ret["type"] === "tree") {
+            ret["children"] = JSON.parse(ret["children"])
+        }
+
         return ret as GitObject
     }
 
     async saveGitObject(sha: string, obj: GitObject) {
-        await this.gitObjectRepository.save(sha, obj)
-        await this.gitObjectRepository.expire(sha, 4 * 3600)
+        const obj_: Record<string, any> = { ...obj }
+        if (obj.type === "tree") {
+            obj_.children = JSON.stringify(obj.children)
+        }
+
+        await this.gitObjectRepository.save(sha, obj_)
+        await this.gitObjectRepository.expire(sha, 4 * 3600) // 4h
+    }
+
+    async getDistInfo(repoPath: string, branch: string): Promise<DistInfo | null> {
+        const ret = await this.distInfoRepository.fetch(`${repoPath}:${branch}`)
+
+        if (ret["content"] === undefined) {
+            return null
+        }
+
+        const json = JSON.parse(ret["content"])
+        json["children"] = new Map(json["children"])
+
+        return json
+    }
+
+    async saveDistInfo(repoPath: string, branch: string, info: DistInfo) {
+        // Because how typescript works an absolutely HUGE object with lots of
+        // fields can still typecheck as DistInfo, so we manually extract only
+        // the fields relevant to DistInfo to ensure that unecessary data is not
+        // saved to Redis.
+
+        const info_ = {
+            sha: info.sha,
+            children: [...info.children.entries()].map(([k, v]: any) => {
+                return [k, {
+                    sha: v.sha,
+                    type: v.type,
+                }]
+            })
+        }
+
+        await this.distInfoRepository.save(
+            `${repoPath}:${branch}`,
+            { content: JSON.stringify(info_) },
+        )
+        await this.distInfoRepository.expire(`${repoPath}:${branch}`, 600) // 10min
     }
 }

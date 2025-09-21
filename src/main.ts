@@ -3,6 +3,7 @@ import type { Response, NextFunction as Next } from "express"
 import { engine } from 'express-handlebars';
 import bodyParser from "body-parser"
 import serveStatic from "serve-static"
+import { ServerResponse } from "http";
 
 import { parse } from "node-html-parser"
 import type { HTMLElement } from "node-html-parser"
@@ -11,43 +12,18 @@ import * as fs from "fs/promises"
 
 import { lookup as mimeLookup } from "mime-types"
 
+import { validateGitHubRepoPath, type ProjectSettings } from "./common.ts"
 import { TranslationMap, serveStaticWithMapHtml } from "./utils.ts"
 import type { JsonLike } from "./utils.ts"
 import * as utils from "./utils.ts"
-
 import * as db from "./db.ts"
 import * as gh from "./github.ts"
 import { Cache } from "./cache.ts"
-
 import * as schemas from "../schemas/schemas.ts"
-import { ServerResponse } from "http";
+import { makeFakeFs } from "./fakeFs.ts";
 
 const app = express()
 const port = 3000
-
-type Project = {
-    location: Location
-}
-
-type Location = {
-    type: "local"
-    path: string
-}
-
-type ProjectSettings = {
-    distDir: string
-    sourceLanguage: string
-    targetLanguages: string[]
-    contentSelector: string
-    existingTranslations: TranslationMap
-}
-
-//const project: Project = {
-//    location: {
-//        type: "local",
-//        path: "/home/emma/projects/fee-strike/frontend/",
-//    }
-//}
 
 async function main(serverSettings: schemas.ServerSettings) {
     const cache = await Cache.new(serverSettings.redis.url)
@@ -358,58 +334,36 @@ async function main(serverSettings: schemas.ServerSettings) {
         info: db.ProjectInfo,
         settings: ProjectSettings
     ): Promise<void> {
-        //const distPath = path.join(project.location.path, settings.distDir)
-        const distPath = (() => {
-            if (settings.distDir.startsWith("/")) {
-                return settings.distDir.slice(1)
-            }
-            if (settings.distDir.startsWith("./")) {
-                return settings.distDir.slice(2)
-            }
-            return settings.distDir
-        })()
+        const ghRepoPath = validateGitHubRepoPath(info.path)
+        if (ghRepoPath === null) {
+            throw new Error("TODO")
+        }
+        const fakeFs = makeFakeFs(
+            ghRepoPath,
+            info.token,
+            settings,
+            cache,
+        )
 
-        // TODO branch should be configurable
-        // TODO: recursive: false is temporary -- don't want to be rate-limited
-        // while we have no caching.
-        const tree = await gh.tree(info.token, info.path, `main:${distPath}`, false)
+        const entries = await fakeFs.distEntries()
 
-        // TODO handle
-        if (tree.truncated) {
-            throw new Error("Unexpected")
+        if (entries === null) {
+            throw new Error("TODO")
         }
 
-        for (const e of tree.tree) {
+        for (const { type, sha} of [...entries.values()]) {
             // Skip directories
-            if (e.type === "tree") {
+            if (type === "tree") {
                 continue
             }
 
-            const content = await (async () => {
-                // Is the value cached?
-                const cached = await cache.getGitObject(e.sha)
-                if (cached !== null) {
-                    if (cached.type === "tree") {
-                        throw new Error("Unexpected")
-                    }
-                    return cached.content
-                }
+            const content = await fakeFs.gitBlob(sha)
 
-                const entryPath = `${distPath}/${e.path}`
-                const file = await gh.repoFile(info.token, info.path, entryPath)
-
-                if (file.type === "directory") {
-                    throw new Error("Unexpected")
-                }
-
-                cache.saveGitObject(e.sha, {
-                    type: "blob",
-                    size: e.size,
-                    content: file.content,
-                })
-
-                return file.content
-            })()
+            // The blob doesn't exist event though it's a child of the dist
+            // tree.
+            if (content === null) {
+                throw new Error("Unexpected")
+            }
 
             const parsed: HTMLElement = parse(content, {
                 parseNoneClosedTags: true,
@@ -433,61 +387,38 @@ async function main(serverSettings: schemas.ServerSettings) {
         info: db.ProjectInfo,
         settings: ProjectSettings,
     ): Promise<Map<string, CoverageReport>> {
-        //const distPath = path.join(project.location.path, settings.distDir)
-        const distPath = (() => {
-            if (settings.distDir.startsWith("/")) {
-                return settings.distDir.slice(1)
-            }
-            if (settings.distDir.startsWith("./")) {
-                return settings.distDir.slice(2)
-            }
-            return settings.distDir
-        })()
+        const ghRepoPath = validateGitHubRepoPath(info.path)
+        if (ghRepoPath === null) {
+            throw new Error("TODO")
+        }
+        const fakeFs = makeFakeFs(
+            ghRepoPath,
+            info.token,
+            settings,
+            cache,
+        )
 
         const stats: Map<string, CoverageReport> = new Map([])
 
-        // TODO branch should be configurable
-        // TODO: recursive: false is temporary -- don't want to be rate-limited
-        // while we have no caching.
-        const tree = await gh.tree(info.token, info.path, `main:${distPath}`, false)
+        const entries = await fakeFs.distEntries()
 
-        // TODO handle
-        if (tree.truncated) {
-            throw new Error("Unexpected")
+        if (entries === null) {
+            throw new Error("TODO")
         }
 
-        for (const e of tree.tree) {
+        for (const { type, sha } of [...entries.values()]) {
             // Skip directories
-            if (e.type === "tree") {
+            if (type === "tree") {
                 continue
             }
 
-            const content = await (async () => {
-                // Is the value cached?
-                const cached = await cache.getGitObject(e.sha)
-                if (cached !== null) {
-                    if (cached.type === "tree") {
-                        throw new Error("Unexpected")
-                    }
-                    return cached.content
-                }
+            const content = await fakeFs.gitBlob(sha)
 
-                const entryPath = `${distPath}/${e.path}`
-                const file = await gh.repoFile(info.token, info.path, entryPath)
-
-                if (file.type === "directory") {
-                    throw new Error("Unexpected")
-                }
-
-                cache.saveGitObject(e.sha, {
-                    type: "blob",
-                    size: e.size,
-                    content: file.content,
-                })
-
-                return file.content
-            })()
-
+            // The blob doesn't exist event though it's a child of the dist
+            // tree.
+            if (content === null) {
+                throw new Error("Unexpected")
+            }
 
             const parsed: HTMLElement = parse(content, {
                 parseNoneClosedTags: true,

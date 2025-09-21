@@ -148,6 +148,39 @@ export type File = {
     }[],
 }
 
+export async function repoBlob(
+    token: string,
+    repoPath: string,
+    sha: string
+): Promise<{ size: number, content: string }> {
+    const [userName, projectName] = assertRepoPath(repoPath)
+
+    const ret = await get(
+        ["repos", userName, projectName, "git", "blobs", sha],
+        token,
+        {
+            headers: { "Accept": "application/vnd.github.raw+json" },
+        },
+    )
+
+    // TODO With CURL this endpoint return a content-length header,
+    // but here it doesn't, what gives? Giving value of -1 for now, I don't
+    // think we need size in the first place..
+    const size = ret.headers.get("Content-Length") ?? -1
+    if (size === null) {
+        throw new Error("Unexpected")
+    }
+    const n = Number(size)
+    if (Number.isNaN(n)) {
+        throw new Error("Unexpected")
+    }
+
+    return {
+        size: n,
+        content: (await ret.text()),
+    }
+}
+
 export async function repoFile(
     token: string,
     repoPath: string,
