@@ -5,7 +5,7 @@
         "module": "ESNext",
         "target": "ES2015",
         "sourceMap": true,
-        "outDir": "../public",
+        "outDir": "../../dist",
         "skipLibCheck": true
     },
 }

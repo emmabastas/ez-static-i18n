@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <title>ezi18n</title>
 
-    <script type="module" src="/translationTable.js"></script>
+    <script type="module" src="../webComponents/translationTable.ts"></script>
 </head>
 <body>
     <table>
@@ -13,13 +13,13 @@
             <th>translated phrases</th>
             <th>total</th>
         </tr>
-        {{# coverage }}
+        <!--{{# coverage }}-->
         <tr>
             <td>{{ language }}</td>
             <td>{{ translated }}</td>
             <td>{{ phrases }}</td>
         </tr>
-        {{/ coverage }}
+        <!--{{/ coverage }}-->
     </table>
 
     <translation-table project-name="{{ project }}">
@@ -27,20 +27,20 @@
             <thead>
                 <tr>
                     <th>{{ sourceLanguage }}</th>
-                    {{# targetLanguages }}
+                    <!--{{# targetLanguages }}-->
                     <th>{{ . }}</th>
-                    {{/ targetLanguages }}
+                    <!--{{/ targetLanguages }}-->
                 </tr>
             </thead>
             <tbody>
-                {{# translations }}
+                <!--{{# translations }}-->
                 <tr>
                     <td>{{ sourcePhrase }}</td>
-                    {{# translatedPhrases }}
+                    <!--{{# translatedPhrases }}-->
                     <td>{{ . }}</td>
-                    {{/ translatedPhrases }}
+                    <!--{{/ translatedPhrases }}-->
                 </tr>
-                {{/ translations }}
+                <!--{{/ translations }}-->
             </tbody>
         </table>
     </translation-table>

@@ -161,7 +161,7 @@ async function main(serverSettings: schemas.ServerSettings) {
         },
         secret: serverSettings.cookieSecret,
     }))
-    app.set("views", "./views")
+    app.set("views", "./dist")
     app.engine("html", engine({
         extname: "html",
         defaultLayout: false,
@@ -185,7 +185,7 @@ async function main(serverSettings: schemas.ServerSettings) {
         next()
     }
 
-    app.use(serveStatic("public", {
+    app.use(serveStatic("dist", {
         dotfiles: "ignore",
         lastModified: false,
         setHeaders: (res: ServerResponse, path: string) => {

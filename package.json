@@ -1,8 +1,8 @@
 {
     "type": "module",
     "scripts": {
-        "start": "concurrently --kill-others \"npm run components:dev\" \"node --experimental-strip-types src/main.ts\"",
-        "components:dev": "tsc --watch --project ./components",
+        "start": "concurrently --kill-others \"npm run views:dev\" \"node --experimental-strip-types src/main.ts\"",
+        "views:dev": "parcel watch --no-content-hash --no-hmr --dist-dir ./dist/ src/views/**/*.html",
         "schemas:compile": "node --experimental-strip-types ./schemas/compile.ts"
     },
     "dependencies": {
@@ -21,6 +21,7 @@
         "express-session": "^1.18.2",
         "mime-types": "^3.0.1",
         "node-html-parser": "^7.0.1",
+        "parcel": "^2.16.0",
         "redis": "^5.8.2",
         "redis-om": "^0.4.7"
     },
