@@ -23,9 +23,6 @@ import * as schemas from "../schemas/schemas.ts"
 import { makeFakeGitHubFs } from "./fakeFs.ts";
 import type { FakeFs } from "./fakeFs.ts"
 
-const app = express()
-const port = 3000
-
 type Session = {
     userId: number,
     //newTranslations: Map<string, TranslationMap> // project -> translatioNmap
@@ -146,6 +143,7 @@ export function serveStaticFromFakeFsDist(
 }
 
 async function main(serverSettings: schemas.ServerSettings) {
+    const app = express()
     const cache = await Cache.new(serverSettings.redis.url)
 
     // app.set("trust proxy", 1) // Uncomment this when wunning behind an https proxy.
@@ -462,8 +460,8 @@ async function main(serverSettings: schemas.ServerSettings) {
         res.send(200)
     })
 
-    app.listen(port, () => {
-      console.log(`Listening on port ${port}`)
+    app.listen(serverSettings.port, () => {
+      console.log(`Listening on port ${serverSettings.port}`)
     })
 
     type CoverageReport = {

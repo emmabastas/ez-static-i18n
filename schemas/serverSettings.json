@@ -1,6 +1,7 @@
 {
     "type": "object",
     "properties": {
+        "port": { "type": "number" },
         "cookieSecret": { "type": "string" },
         "redis": {
             "type": "object",
@@ -11,6 +12,6 @@
             "additionalProperties": false
         }
     },
-    "required": [ "cookieSecret", "redis" ],
+    "required": [ "port", "cookieSecret", "redis" ],
     "additionalProperties": false
 }
