@@ -1,6 +1,7 @@
 import type { JSONSchemaType } from "ajv";
 export interface ServerSettings {
     port: number;
+    sqlitePath: string;
     cookieSecret: string;
     redis: {
         url: string;

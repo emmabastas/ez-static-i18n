@@ -587,9 +587,9 @@ async function main(serverSettings: schemas.ServerSettings) {
 }
 
 let _serverSettings : schemas.ServerSettings | null = null
-async function getServerSettings() : Promise<schemas.ServerSettings> {
+async function getServerSettings(path: string) : Promise<schemas.ServerSettings> {
     if (_serverSettings === null) {
-        const str = await fs.readFile("./settings.dev.json", { encoding: "utf8" })
+        const str = await fs.readFile(path, { encoding: "utf8" })
         const json = JSON.parse(str)
         if (schemas.serverSettings.validate(json)) {
             _serverSettings = json
@@ -600,4 +600,15 @@ async function getServerSettings() : Promise<schemas.ServerSettings> {
     return _serverSettings
 }
 
-getServerSettings().then(serverSettings => main(serverSettings))
+if (process.argv.length !== 3) {
+    console.log("")
+    console.log("--------------------------------------------")
+    console.log("Usage: ez-static-i18n-server <settings.json>")
+    console.log("--------------------------------------------")
+    console.log("")
+    process.exit(-1)
+}
+
+const settingsPath = process.argv[2]
+
+getServerSettings(settingsPath).then(serverSettings => main(serverSettings))

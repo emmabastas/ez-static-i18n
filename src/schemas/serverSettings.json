@@ -2,6 +2,7 @@
     "type": "object",
     "properties": {
         "port": { "type": "number" },
+        "sqlitePath": { "type": "string" },
         "cookieSecret": { "type": "string" },
         "redis": {
             "type": "object",
@@ -12,6 +13,6 @@
             "additionalProperties": false
         }
     },
-    "required": [ "port", "cookieSecret", "redis" ],
+    "required": [ "port", "sqlitePath", "cookieSecret", "redis" ],
     "additionalProperties": false
 }

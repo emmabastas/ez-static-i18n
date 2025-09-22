@@ -4,6 +4,7 @@ import type { JSONSchemaType } from "ajv"
 
 export interface ServerSettings {
   port: number;
+  sqlitePath: string;
   cookieSecret: string;
   redis: {
     url: string;
@@ -16,6 +17,9 @@ export const schema: JSONSchemaType<ServerSettings> = {
     "properties": {
         "port": {
             "type": "number"
+        },
+        "sqlitePath": {
+            "type": "string"
         },
         "cookieSecret": {
             "type": "string"
@@ -35,6 +39,7 @@ export const schema: JSONSchemaType<ServerSettings> = {
     },
     "required": [
         "port",
+        "sqlitePath",
         "cookieSecret",
         "redis"
     ],
