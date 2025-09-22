@@ -4,3 +4,4 @@ dev.db
 settings.dev.json
 dump.rdb
 .parcel-cache/
+lib/tsconfig.tsbuildinfo
