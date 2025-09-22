@@ -13,7 +13,7 @@
     "author": "Emma Bastås <emma.bastas@protonmail.com>",
     "files": [
         "./lib/**/*.js",
-        "./dist/**/*.{html,css}"
+        "./dist/**/*.{js,html,css}"
     ],
     "bin": {
         "ez-static-i18n-server": "./lib/main.js"
