@@ -17,7 +17,6 @@
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
               nodejs
-              nodePackages."typescript"
               nodePackages."typescript-language-server"
               sqlite
               sqlitebrowser

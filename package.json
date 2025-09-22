@@ -1,30 +1,38 @@
 {
     "name": "ez-static-i18n",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "summary": "Let non-technical people contribute to i18n for static websites.",
     "keywords": [],
     "homepage": "https://github.com/emmabastas/ez-static-i18n#readme",
     "repository": "github.com:emmabastas/ez-static-i18n",
     "bugs": {
-      "url": "https://github.com/emmabastas/ez-static-i18n/issues",
-      "email": "emma.bastas@protonmail.com"
+        "url": "https://github.com/emmabastas/ez-static-i18n/issues",
+        "email": "emma.bastas@protonmail.com"
     },
     "license": "AGPL-3.0-or-later",
     "author": "Emma Bastås <emma.bastas@protonmail.com>",
-    "files": [ "./src/**/*.{ts,html,css}", "./schemas/**/*.{json,ts}" ],
+    "files": [
+        "./src/**/*.{ts,html,css}",
+        "./schemas/**/*.{json,ts}"
+    ],
     "bin": {
-        "ez-static-i18n-server": "./src/main.ts"
+        "ez-static-i18n-server": "./lib/main.js"
     },
     "type": "module",
     "engines": {
         "node": ">=22.6.0"
     },
-    "os": ["darwin", "linux"],
+    "os": [
+        "darwin",
+        "linux"
+    ],
     "scripts": {
-        "start": "concurrently --kill-others \"npm run views:dev\" \"node --experimental-strip-types src/main.ts\"",
+        "start": "concurrently --kill-others \"npm run views:serve\" \"node --experimental-strip-types src/main.ts\"",
+        "build": "npm run typescript:build",
+        "typescript:build": "tsc --project ./src/tsconfig.json",
         "views:serve": "parcel watch --no-content-hash --no-hmr --dist-dir ./dist/ src/views/**/*.html",
         "views:build": "parcel build --no-content-hash --dist-dir ./dist/ src/views/**/*.html",
-        "schemas:compile": "node --experimental-strip-types ./schemas/compile.ts"
+        "schemas:build": "node --experimental-strip-types ./src/schemas/compile.ts"
     },
     "dependencies": {
         "@tailwindcss/postcss": "^4.1.13",
@@ -49,6 +57,7 @@
         "@types/express": "github:types/npm-express",
         "@types/express-session": "^1.18.2",
         "@types/mime-types": "^3.0.1",
-        "json-schema-to-typescript": "^15.0.4"
+        "json-schema-to-typescript": "^15.0.4",
+        "typescript": "^5.9.2"
     }
 }

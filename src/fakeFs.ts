@@ -1,5 +1,5 @@
 import { Cache } from "./cache.ts"
-import * as schemas from "../schemas/schemas.ts"
+import * as schemas from "./schemas/schemas.ts"
 import * as gh from "./github.ts"
 import {
     makeGitHubPath,

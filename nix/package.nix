@@ -6,7 +6,7 @@
 
 buildNpmPackage (finalAttrs: {
   pname = "ez-static-i18n-server";
-  version = "0.1.1";
+  version = "0.1.2";
 
   src = fetchFromGitHub {
     owner = "emmabastas";
@@ -19,13 +19,11 @@ buildNpmPackage (finalAttrs: {
 
   npmPackFlags = [ "--ignore-scripts" ];
 
-  npmBuildScript = "views:build";
+  npmBuildScript = "build";
 
   forceGitDeps = true;
 
-  makeCacheWriteable = true;
-
-  NODE_OPTIONS = "--experimental-strip-types";
+  makeCacheWritable = true;
 
   meta = {
     description = "Let non-technical people contribute to i18n for static websites.";

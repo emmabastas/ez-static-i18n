@@ -21,7 +21,7 @@ import * as utils from "./utils.ts"
 import * as db from "./db.ts"
 import * as gh from "./github.ts"
 import { Cache } from "./cache.ts"
-import * as schemas from "../schemas/schemas.ts"
+import * as schemas from "./schemas/schemas.ts"
 import { makeFakeGitHubFs } from "./fakeFs.ts";
 import type { FakeFs } from "./fakeFs.ts"
 

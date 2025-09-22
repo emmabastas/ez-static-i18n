@@ -2,7 +2,7 @@ import * as fs from "fs/promises"
 import { compile } from 'json-schema-to-typescript'
 
 async function main() {
-    for await (const e of fs.glob("./schemas/**/*.json")) {
+    for await (const e of fs.glob("./src/schemas/**/*.json")) {
         const name = e.split("/").pop()!.slice(0, -5)
         const pascalCase = name.charAt(0).toUpperCase() + name.slice(1)
 
@@ -11,7 +11,8 @@ async function main() {
 
         const tsInterface = await compile(schema, pascalCase, { bannerComment: "" })
 
-        const output = `import { Ajv } from "ajv"
+        const output = `// @ts-nocheck
+import { Ajv } from "ajv"
 import type { JSONSchemaType } from "ajv"
 
 ${tsInterface}
