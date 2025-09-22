@@ -145,6 +145,8 @@ export function serveStaticFromFakeFsDist(
 }
 
 async function main(serverSettings: schemas.ServerSettings) {
+    db.initialize(serverSettings.sqlitePath)
+
     const app = express()
     const cache = await Cache.new(serverSettings.redis.url)
 

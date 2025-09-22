@@ -2,6 +2,7 @@ export type Project = {
     token: string;
     type: 1;
 };
+export declare function initialize(path: string): void;
 export declare function projects(): Project;
 export declare function authenticateUser(email: string, password: string): Promise<number | null>;
 export declare function createUser(email: string, password: string): Promise<void>;

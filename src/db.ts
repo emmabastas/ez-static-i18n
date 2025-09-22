@@ -7,10 +7,20 @@ export type Project = {
     type: 1, // 1 = GitHub personal access token (PAT)
 }
 
+// TODO do something more typesafe
+
 let db_: DatabaseSync | null = null
+
+export function initialize(path: string) {
+    if (db_ !== null) {
+        throw new Error("multiple initialize")
+    }
+    db_ = new DatabaseSync(path)
+}
+
 function db(): DatabaseSync {
     if (db_ === null) {
-        db_ = new DatabaseSync("./dev.db")
+        throw new Error("not initialized")
     }
     return db_
 }
