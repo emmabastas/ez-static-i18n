@@ -6,13 +6,13 @@
 
 buildNpmPackage (finalAttrs: {
   pname = "ez-static-i18n-server";
-  version = "0.1.4";
+  version = "0.1.5";
 
   src = fetchFromGitHub {
     owner = "emmabastas";
     repo = "ez-static-i18n";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-qIfWlYr5s05359QIRjEoNz/24hxMQORBB4SxyLleWlU=";
+    hash = "sha256-9Dv6fyb/iAQD+EsiyGw9H9Ytep79BIW/VfLAVGnII4I=";
   };
 
   npmDepsHash = "sha256-3KpVjtJErFp6joCgtf/3evqB8yCfEO+dra88GNEh9LM=";
