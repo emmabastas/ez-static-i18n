@@ -12,14 +12,15 @@ buildNpmPackage (finalAttrs: {
     owner = "emmabastas";
     repo = "ez-static-i18n";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-q6cFRpB/u9r+f4gX+zaHd2yuE0SigtEmW6KtfwFK+RA=";
+    hash = "sha256-tjz4LXy2nlTDfSGFv0GFuE22cJiIptnr7sJJiqsRh40=";
   };
 
-  npmDepsHash = "sha256-Ne18hDkk7jg4kqjhke2EsCCsgt6xwZb0s4Q7f7kyNg0=";
+  npmDepsHash = "sha256-3KpVjtJErFp6joCgtf/3evqB8yCfEO+dra88GNEh9LM=";
 
   npmPackFlags = [ "--ignore-scripts" ];
 
-  npmBuildScript = "build";
+  # npmBuildScript = "build";
+  dontNpmBuild = true;
 
   forceGitDeps = true;
 

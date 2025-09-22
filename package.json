@@ -12,8 +12,8 @@
     "license": "AGPL-3.0-or-later",
     "author": "Emma Bastås <emma.bastas@protonmail.com>",
     "files": [
-        "./src/**/*.{ts,html,css}",
-        "./schemas/**/*.{json,ts}"
+        "./lib/**/*.js",
+        "./dist/**/*.{html,css}"
     ],
     "bin": {
         "ez-static-i18n-server": "./lib/main.js"
