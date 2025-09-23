@@ -212,7 +212,7 @@ async function main(serverSettings: schemas.ServerSettings) {
         const id = await db.authenticateUser(email, password)
 
         if (id === null) {
-            res.render("login", { signupFailed: true })
+            res.render("login", { loginFailed: true })
             return
         }
 
@@ -230,8 +230,8 @@ async function main(serverSettings: schemas.ServerSettings) {
 
     app.post("/signup", async (req: Request, res: Response) => {
         // @ts-ignore
-        const { email, password } = utils.assertUrlEncoded(req, res)
-        await db.createUser(email, password)
+        const { email, name, password } = utils.assertUrlEncoded(req, res)
+        await db.createUser(email, name, password)
         res.redirect("/login")
     })
 

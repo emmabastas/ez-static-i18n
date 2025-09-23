@@ -28,10 +28,10 @@
     ],
     "scripts": {
         "start": "concurrently --kill-others \"npm run views:serve\" \"node --experimental-strip-types src/main.ts settings.dev.json\"",
-        "build": "npm run typescript:build",
+        "build": "npm run typescript:build && views:build",
         "typescript:build": "tsc --project ./src/tsconfig.json",
-        "views:serve": "parcel watch --no-content-hash --no-hmr --dist-dir ./dist/ src/views/**/*.html",
-        "views:build": "parcel build --no-content-hash --dist-dir ./dist/ src/views/**/*.html",
+        "views:serve": "rm -r .parcel-cache && parcel watch --no-content-hash --no-hmr --dist-dir ./dist/ ./src/views/**/*.html",
+        "views:build": "parcel build --no-content-hash --dist-dir ./dist/ ./src/views/**/*.html",
         "schemas:build": "node --experimental-strip-types ./src/schemas/compile.ts"
     },
     "dependencies": {

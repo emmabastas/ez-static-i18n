@@ -1,15 +1,25 @@
-<!DOCTYPE html><html><head>
-    <meta charset="utf-8">
-    <title>ezi18n</title>
-</head>
-<body>
-    <form action="/signup" method="post">
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email">
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password">
-        <input type="submit">
+<!DOCTYPE html><meta charset=utf-8><title>ezi18n</title><link href=/home.57a29b70.css rel=stylesheet><body class="flex flex-col items-center justify-center">
+    <form action=/signup method=post class="flex flex-col gap-3 items-center rounded shrink">
+        {{# signupFailed }}
+        <aside role=alert class="flex flex-col items-center my-4 w-full">
+            <p>Hhmnn.. Something went wrong when trying to sign you up.</p>
+        </aside>
+        {{/ signupFailed }}
+        <div class="flex flex-col gap-0 w-full">
+            <label for=email>Email</label>
+            <input id=email name=email type=email class="border rounded">
+        </div>
+        <div class="flex flex-col gap-0 w-full">
+            <label for=name>Display name</label>
+            <input id=name name=name class="border rounded">
+        </div>
+        <div class="flex flex-col gap-0 w-full">
+            <label for=password>Password</label>
+            <input id=password name=password type=password class="border rounded">
+        </div>
+        <input type=submit class="my-2 w-full">
+        <p>Already have an account?, <a href=/login>Log in!</a>!
     </form>
-    <p>Already have an account?, <a href="/login">Log in!</a>!
 
-</p></body></html>
+
+

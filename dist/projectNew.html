@@ -1,20 +1,26 @@
-<!DOCTYPE html><html><head>
-    <meta charset="utf-8">
-    <title>ezi18n</title>
-</head>
-<body>
-    {{# errorMessage }}
-    <p>{{ . }}</p>
-    {{/ errorMessage }}
-    <form action="/project/new" method="post">
-        <label for="name">Name</label>
-        <input id="name" name="name" type="text">
-        <label for="repopath">Repository name</label>
-        <p style="display: inline">www.github.com/</p><input id="repopath" name="repopath">
-        <label for="pat">Personal access token</label>
-        <input id="pat" name="pat" type="password">
-        <input type="submit">
-    </form>
+<!DOCTYPE html><meta charset=utf-8><title>ezi18n</title><link href=/home.57a29b70.css rel=stylesheet><body class="flex flex-col items-center justify-center">
+    <form action=/project/new method=post class="flex flex-col gap-3 items-center rounded shrink">
+        {{# errorMessage }}
+        <aside role=alert class="flex flex-col items-center my-4 w-full">
+            <p>{{ . }}</p>
+        </aside>
+        {{/ errorMessage }}
+        <div class="flex flex-col gap-0 w-full">
+            <label for=name>Project name</label>
+            <input id=name name=name class="border rounded">
+        </div>
+        <div class="flex flex-col gap-0 w-full">
+            <label for=repopath>GitHub repository</label>
+            <div class="flex flex-row">
+                <p style=display:inline>www.github.com/</p>
+                <input id=repopath name=repopath class="border rounded">
+            </div>
+        </div>
+        <div class="flex flex-col gap-0 w-full">
+            <label for=pat>Access token</label>
+            <input id=pat name=pat type=password class="border rounded">
+        </div>
+        <input type=submit class="my-2 w-full">
+    <p></form>
 
 
-</body></html>

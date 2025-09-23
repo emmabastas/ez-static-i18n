@@ -3,14 +3,30 @@
 <head>
     <meta charset="utf-8">
     <title>ezi18n</title>
+    <link href="./common.css" type="text/css" rel="stylesheet">
 </head>
-<body>
-    <form action="/signup" method="post">
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email">
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password">
-        <input type="submit">
-    </form>
-    <p>Already have an account?, <a href="/login">Log in!</a>!
+<body class="flex flex-col justify-center items-center">
+    <form action="/signup" method="post" class="flex flex-col shrink items-center  rounded gap-3">
+        {{# signupFailed }}
+        <aside role="alert" class="flex flex-col items-center my-4 w-full">
+            <p>Hhmnn.. Something went wrong when trying to sign you up.</p>
+        </aside>
+        {{/ signupFailed }}
+        <div class="flex flex-col w-full gap-0">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" class="border rounded">
+        </div>
+        <div class="flex flex-col w-full gap-0">
+            <label for="name">Display name</label>
+            <input id="name" name="name" type="text" class="border rounded">
+        </div>
+        <div class="flex flex-col w-full gap-0">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" class="border rounded">
+        </div>
+        <input type="submit" class="w-full my-2">
+        <p>Already have an account?, <a href="/login">Log in!</a>!
+    </p></form>
+
 </body>
+</html>

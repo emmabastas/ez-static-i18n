@@ -5,7 +5,7 @@ export type Project = {
 export declare function initialize(path: string): void;
 export declare function projects(): Project;
 export declare function authenticateUser(email: string, password: string): Promise<number | null>;
-export declare function createUser(email: string, password: string): Promise<void>;
+export declare function createUser(email: string, displayName: string, password: string): Promise<void>;
 export type ProjectSummary = {
     id: string;
     name: string;

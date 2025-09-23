@@ -63,16 +63,16 @@ export async function authenticateUser(email: string, password: string): Promise
     }
 }
 
-export async function createUser(email: string, password: string) {
+export async function createUser(email: string, displayName: string, password: string) {
     // TODO: We should do something like this
     // https://stackoverflow.com/a/3408196
     // to handle existing usr.
 
     const key = await bcrypt.hash(password, 10)
     const q = db().prepare(`
-        INSERT INTO users (key, email) VALUES (?, ?)`)
+        INSERT INTO users (key, display_name, email) VALUES (?, ?, ?)`)
 
-    q.run(key, email)
+    q.run(key, displayName, email)
 }
 
 export type ProjectSummary = {
